@@ -1,0 +1,165 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum TradeType {
+  SWAP
+  GIVEAWAY
+  PICKUP
+}
+
+enum TradeRequestStatus {
+  OPEN
+  PENDING
+  ACCEPTED
+  REJECTED
+  CANCELED
+  EXPIRED
+}
+
+enum TradeOfferStatus {
+  PENDING
+  ACCEPTED
+  DECLINED
+  CANCELED
+}
+
+enum AssignmentStatus {
+  ASSIGNED
+  RELEASED
+  SWAPPED
+}
+
+model User {
+  id           String   @id @default(uuid())
+  email        String   @unique
+  passwordHash String
+  firstName    String
+  lastName     String
+  pernerNumber Int      @unique
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  assignments   ShiftAssignment[]
+  tradeRequests TradeRequest[] @relation("RequestsByUser")
+  tradeOffers   TradeOffer[]   @relation("OffersByUser")
+
+  @@map("users")
+}
+
+model Location {
+  id        String   @id @default(uuid())
+  name      String
+  park      String?
+  createdAt DateTime @default(now())
+
+  positions Position[]
+  shifts    Shift[]
+
+  @@unique([name, park])
+  @@map("locations")
+}
+
+model Position {
+  id        String   @id @default(uuid())
+  name      String
+  createdAt DateTime @default(now())
+
+  locationId String
+  location   Location @relation(fields: [locationId], references: [id], onDelete: Cascade)
+
+  shifts Shift[]
+
+  @@unique([locationId, name])
+  @@map("positions")
+}
+
+model Shift {
+  id        String   @id @default(uuid())
+  startAt   DateTime
+  endAt     DateTime
+  notes     String?
+  createdAt DateTime @default(now())
+
+  locationId String
+  location   Location @relation(fields: [locationId], references: [id], onDelete: Cascade)
+
+  positionId String
+  position   Position @relation(fields: [positionId], references: [id], onDelete: Restrict)
+
+  assignments               ShiftAssignment[]
+  tradeRequests             TradeRequest[]
+  tradeOffersAsOfferedShift TradeOffer[]
+
+  @@index([locationId, startAt])
+  @@index([positionId, startAt])
+  @@map("shifts")
+}
+
+model ShiftAssignment {
+  id        String           @id @default(uuid())
+  status    AssignmentStatus @default(ASSIGNED)
+  createdAt DateTime         @default(now())
+
+  shiftId String
+  shift   Shift  @relation(fields: [shiftId], references: [id], onDelete: Cascade)
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@index([shiftId, createdAt])
+  @@map("shift_assignments")
+}
+
+model TradeRequest {
+  id        String             @id @default(uuid())
+  type      TradeType
+  status    TradeRequestStatus @default(OPEN)
+  message   String?
+  expiresAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // El turno que se ofrece/publica
+  shiftId String
+  shift   Shift  @relation(fields: [shiftId], references: [id], onDelete: Cascade)
+
+  // Quién creó la solicitud
+  requestedByUserId String
+  requestedByUser   User   @relation("RequestsByUser", fields: [requestedByUserId], references: [id], onDelete: Cascade)
+
+  offers TradeOffer[]
+
+  @@index([status, createdAt])
+  @@index([requestedByUserId, createdAt])
+  @@map("trade_requests")
+}
+
+model TradeOffer {
+  id        String           @id @default(uuid())
+  status    TradeOfferStatus @default(PENDING)
+  createdAt DateTime         @default(now())
+  updatedAt DateTime         @updatedAt
+
+  tradeRequestId String
+  tradeRequest   TradeRequest @relation(fields: [tradeRequestId], references: [id], onDelete: Cascade)
+
+  offeredByUserId String
+  offeredByUser   User   @relation("OffersByUser", fields: [offeredByUserId], references: [id], onDelete: Cascade)
+
+  // Para SWAP: el turno que ofrece el otro usuario. Para GIVEAWAY/PICKUP: null
+  offeredShiftId String?
+  offeredShift   Shift?  @relation(fields: [offeredShiftId], references: [id], onDelete: SetNull)
+
+  @@index([tradeRequestId, createdAt])
+  @@index([offeredByUserId, createdAt])
+  @@map("trade_offers")
+}
