@@ -4,8 +4,6 @@ import AppShell from "./components/AppShell.jsx";
 import Home from "./pages/Home.jsx";
 import Locations from "./pages/Locations.jsx";
 import Profile from "./pages/Profile.jsx";
-import CreateRequest from "./pages/createRequest.jsx";
-import Calendar from "./pages/Calendar.jsx";
 import Inbox from "./pages/Inbox.jsx";
 import Login from "./pages/Login.jsx";
 import Register from "./pages/Register.jsx";
@@ -26,8 +24,6 @@ export default function App() {
       >
         <Route path="/" element={<Home />} />
         <Route path="/locations" element={<Locations />} />
-        <Route path="/create" element={<CreateRequest />} />
-        <Route path="/calendar" element={<Calendar />} />
         <Route path="/inbox" element={<Inbox />} />
         <Route path="/profile" element={<Profile />} />
         <Route path="*" element={<Navigate to="/" replace />} />

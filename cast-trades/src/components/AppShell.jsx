@@ -4,15 +4,13 @@ import { useAuth } from "../auth/AuthContext.jsx";
 
 const tabs = [
   { to: "/home", label: "Home", icon: "🏠" },
-  { to: "/calendar", label: "Calendar", icon: "📅" },
-  { to: "/create", label: "Create", icon: "➕" },
   { to: "/inbox", label: "Inbox", icon: "🔔" },
-  { to: "/profile", label: "Profile", icon: "👤" },
+  { to: "/profile", label: "Profile", icon: "👤" }
 ];
 
 export default function AppShell() {
   const { user, logout } = useAuth();
-  const firstName = (user?.name ?? "").toUpperCase();
+  const firstName = (user?.firstName ?? "").toUpperCase();
   const lastInitial = user?.lastName ? user.lastName.charAt(0).toUpperCase() : "";
 
   return (

@@ -65,10 +65,7 @@ export default function CreateRequest() {
         value={role}
         options={[
           { value: "", label: "Select role..." },
-          { value: "Register", label: "Register" },
-          { value: "Floorstock", label: "Floorstock" },
-          { value: "Greeter", label: "Greeter" },
-          { value: "Stockroom", label: "Stockroom" },
+          { value: "Floorstock", label: "Floorstock" }
         ]}
         onChange={setRole}
       />

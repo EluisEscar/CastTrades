@@ -17,12 +17,13 @@ export default function Register() {
     e.preventDefault();
     setErr("");
 
-    const pernerNum = Number(perner);
+    const pernerValue = perner.trim();
 
-    if (!Number.isInteger(pernerNum) || pernerNum <= 0) {
-      setErr("Perner number must be a valid number.");
+    if (!/^\d+$/.test(pernerValue)) {
+      setErr("Perner number must contain only digits.");
       return;
     }
+
     if (!password || password.length < 6) {
       setErr("Password must be at least 6 characters.");
       return;
@@ -31,19 +32,14 @@ export default function Register() {
     const payload = {
       firstName: name.trim(),
       lastName: lastName.trim(),
-      email: email.trim(),
-      pernerNumber: pernerNum,
+      email: email.trim().toLowerCase(),
+      pernerNumber: pernerValue,
       password,
     };
 
     try {
       await register(payload);
-
-      // Opción A: ya quedas logueado (porque backend devuelve token)
       navigate("/", { replace: true });
-
-      // Opción B (si prefieres): mandarlo a login luego de registrar
-      // navigate("/login", { replace: true });
     } catch (e2) {
       setErr(e2.message || "Register failed");
     }

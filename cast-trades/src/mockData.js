@@ -7,12 +7,27 @@ export const areasByPark = {
 };
 
 export const locations = [
-  { id: "disney_trading_company", parkId: "animal_kingdom", area: "Merch", name: "Disney Trading Company" },
-  { id: "island_mercantile", parkId: "animal_kingdom", area: "Merch", name: "Island Mercantile" },
-  { id: "rivera_depot", parkId: "animal_kingdom", area: "Merch", name: "Rivera Depot" },
+  {
+    id: "discovery_trading_company",
+    parkId: "animal_kingdom",
+    area: "Merch",
+    name: "Discovery Trading Company",
+  },
+  {
+    id: "island_mercantile",
+    parkId: "animal_kingdom",
+    area: "Merch",
+    name: "Island Mercantile",
+  },
+  {
+    id: "africa_mombasa",
+    parkId: "animal_kingdom",
+    area: "Merch",
+    name: "Africa",
+  },
 ];
 
-// Requests simulados (después esto viene de Firestore)
+// Requests simulados (después esto viene de backend / DB)
 export const sampleRequests = [
   {
     id: "req1",
@@ -31,8 +46,8 @@ export const sampleRequests = [
     id: "req2",
     parkId: "animal_kingdom",
     area: "Merch",
-    locationId: "disney_trading_company",
-    locationName: "Disney Trading Company",
+    locationId: "discovery_trading_company",
+    locationName: "Discovery Trading Company",
     role: "Floorstock",
     date: "2025-12-27",
     start: "09:00",
@@ -51,4 +66,9 @@ export const sampleNotifications = [
     createdAt: "2025-12-24T10:10:00Z",
     read: false,
   },
+];
+
+export const MERCH_ROLES = [
+  { value: "Register", label: "Register" },
+  { value: "Floorstock", label: "Floorstock" },
 ];

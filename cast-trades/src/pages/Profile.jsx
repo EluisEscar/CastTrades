@@ -21,7 +21,7 @@ export default function Profile() {
 
   const fields = useMemo(() => {
     return [
-      { key: "name", label: "Name", value: user?.name ?? "" },
+      { key: "name", label: "Name", value: user?.firstName ?? "" },
       { key: "lastName", label: "Last name", value: user?.lastName ?? "" },
       { key: "pernerNumber", label: "Perner number", value: user?.pernerNumber ?? "" },
       { key: "email", label: "Email", value: user?.email ?? "", readOnly: true },

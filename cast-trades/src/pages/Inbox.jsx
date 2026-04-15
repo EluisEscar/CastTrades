@@ -1,191 +1,271 @@
-import React, { useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useAuth } from "../auth/AuthContext.jsx";
-import BottomSheet from "../components/BottomSheet.jsx";
+import {
+  getInbox,
+  ownerAcceptRequest,
+  ownerRejectRequest,
+} from "../api/inbox.js";
 
-function loadRequests() {
-  try {
-    return JSON.parse(localStorage.getItem("casttrades_requests") || "[]");
-  } catch {
-    return [];
+const DECLINED_BY_YOU_LIMIT = 20;
+
+function requestSummary(notification) {
+  const req = notification?.shiftRequest;
+  const locationName = req?.location?.name || "Unknown location";
+  const role = req?.role || "Unknown role";
+  const timeRange =
+    req?.start && req?.end ? `${req.start}-${req.end}` : "Unknown time";
+
+  return `${locationName} • ${role} • ${timeRange}`;
+}
+
+function formatRejectReason(reasonCode) {
+  switch (reasonCode) {
+    case "OVERTIME_LIMIT":
+      return "Reason: Overtime limit";
+    case "INCORRECT_PERNER":
+      return "Reason: Incorrect PERNER";
+    case "OTHER":
+      return "Reason: Other";
+    default:
+      return "";
   }
 }
 
-function saveRequests(next) {
-  localStorage.setItem("casttrades_requests", JSON.stringify(next));
+function formatUpdateMessage(notification) {
+  const locationName =
+    notification?.shiftRequest?.location?.name || "this shift";
+
+  switch (notification?.type) {
+    case "REQUEST_ACCEPTED":
+      return `Your request for ${locationName} was accepted. Please verify it in CastLife.`;
+    case "REQUEST_REJECTED":
+      return `Your request for ${locationName} was declined. ${formatRejectReason(
+        notification?.reasonCode
+      )}`.trim();
+    default:
+      return "No update available.";
+  }
+}
+
+function isValidNotificationItem(item) {
+  return item && item.id;
+}
+
+function removeNotificationByRequestId(items, requestId) {
+  return items.filter((item) => item.shiftRequest?.id !== requestId);
+}
+
+function createDeclinedNotification(item, reasonCode, shiftRequest) {
+  return {
+    ...item,
+    id: `local-declined-${item.id}-${Date.now()}`,
+    type: "DECLINED_BY_YOU",
+    reasonCode,
+    shiftRequest: {
+      ...item.shiftRequest,
+      ...shiftRequest,
+      location: shiftRequest?.location || item.shiftRequest?.location,
+    },
+  };
 }
 
 export default function Inbox() {
-  const { user } = useAuth();
-  const [refreshKey, setRefreshKey] = useState(0);
+  const { token } = useAuth();
 
-  const [declineOpen, setDeclineOpen] = useState(false);
-  const [declineReason, setDeclineReason] = useState("OTA");
-  const [declineTarget, setDeclineTarget] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [actionId, setActionId] = useState(null);
 
-  const pendingForMe = useMemo(() => {
-    if (!user?.uid) return [];
-    const all = loadRequests();
+  const [needsConfirmation, setNeedsConfirmation] = useState([]);
+  const [declinedByYou, setDeclinedByYou] = useState([]);
+  const [updates, setUpdates] = useState([]);
 
-    return all
-      .filter((r) => r.ownerId === user.uid && r.status === "PENDING")
-      .sort((a, b) => (b.pendingAt || "").localeCompare(a.pendingAt || ""));
-  }, [user?.uid, refreshKey]);
+  const [rejectSheetOpen, setRejectSheetOpen] = useState(false);
+  const [rejectRequestId, setRejectRequestId] = useState(null);
+  const [rejectReasonCode, setRejectReasonCode] = useState("");
+  const [reopenShift, setReopenShift] = useState(true);
 
-  const declinedByMe = useMemo(() => {
-    if (!user?.uid) return [];
-    const all = loadRequests();
+  const fetchInboxData = useCallback(async () => {
+    if (!token) return;
 
-    return all
-      .filter((r) => r.ownerId === user.uid && r.status === "DECLINED")
-      .sort((a, b) => (b.declinedAt || "").localeCompare(a.declinedAt || ""));
-  }, [user?.uid, refreshKey]);
+    try {
+      setLoading(true);
+      const data = await getInbox(token);
 
-  const updatesForMe = useMemo(() => {
-    if (!user?.uid) return [];
-    const all = loadRequests();
+      setNeedsConfirmation((data?.needsConfirmation || []).filter(isValidNotificationItem));
+      setDeclinedByYou((data?.declinedByYou || []).filter(isValidNotificationItem));
+      setUpdates((data?.updates || []).filter(isValidNotificationItem));
+    } catch (err) {
+      console.error("FETCH INBOX ERROR:", err);
+      setNeedsConfirmation([]);
+      setDeclinedByYou([]);
+      setUpdates([]);
+    } finally {
+      setLoading(false);
+    }
+  }, [token]);
 
-    return all
-      .filter(
-        (r) =>
-          r.acceptedByUid === user.uid &&
-          (r.status === "CONFIRMED" || r.status === "DECLINED")
-      )
-      .sort((a, b) => {
-        const ta = b.confirmedAt || b.declinedAt || "";
-        const tb = a.confirmedAt || a.declinedAt || "";
-        return ta.localeCompare(tb);
-      });
-  }, [user?.uid, refreshKey]);
+  useEffect(() => {
+    fetchInboxData();
+  }, [fetchInboxData]);
 
-  const confirmDone = (req) => {
-    const ok = confirm("Have you validated in Cast Life and want to confirm?");
-    if (!ok) return;
+  const handleOwnerAccept = async (requestId) => {
+    if (!token || !requestId) return;
 
-    const all = loadRequests();
-    const next = all.map((r) => {
-      if (r.id !== req.id) return r;
+    try {
+      setActionId(requestId);
+      await ownerAcceptRequest(requestId, token);
+      setNeedsConfirmation((current) =>
+        removeNotificationByRequestId(current, requestId)
+      );
+    } catch (err) {
+      console.error("OWNER ACCEPT ERROR:", err);
 
-      return {
-        ...r,
-        status: "CONFIRMED",
-        confirmedAt: new Date().toISOString(),
-      };
-    });
+      if (err.status === 409) {
+        alert("This request was already updated or is no longer available.");
+        setNeedsConfirmation((current) =>
+          removeNotificationByRequestId(current, requestId)
+        );
+        return;
+      }
 
-    saveRequests(next);
-    setRefreshKey((k) => k + 1);
+      alert(err.message || "Failed to approve request.");
+    } finally {
+      setActionId(null);
+    }
   };
 
-  const startDecline = (req) => {
-    setDeclineTarget(req);
-    setDeclineReason("OTA");
-    setDeclineOpen(true);
+  const openRejectSheet = (requestId) => {
+    setRejectRequestId(requestId);
+    setRejectReasonCode("");
+    setReopenShift(true);
+    setRejectSheetOpen(true);
   };
 
-  const submitDecline = () => {
-    if (!declineTarget) return;
-    
-    const rejectedUid = declineTarget.acceptedByUid;
-
-    const all = loadRequests();
-    const next = all.map((r) => {
-      if (r.id !== declineTarget.id) return r;
-
-      return {
-        ...r,
-        status: "DECLINED",
-        declinedReason: declineReason,
-        declinedAt: new Date().toISOString(),
-
-        blockedAcceptors: Array.from(
-          new Set([...(r.blockedAcceptors || []), rejectedUid].filter(Boolean))
-        ),
-      };
-    });
-
-    saveRequests(next);
-    setDeclineOpen(false);
-    setDeclineTarget(null);
-    setRefreshKey((k) => k + 1);
+  const closeRejectSheet = () => {
+    setRejectSheetOpen(false);
+    setRejectRequestId(null);
+    setRejectReasonCode("");
+    setReopenShift(true);
   };
 
-  const reopenRequest = (req) => {
-    const ok = confirm("Re-open this request and make it available again?");
-    if (!ok) return;
+  const handleConfirmReject = async () => {
+    if (!token || !rejectRequestId || !rejectReasonCode) return;
 
-    const all = loadRequests();
-    const next = all.map((r) => {
-      if (r.id !== req.id) return r;
+    try {
+      setActionId(rejectRequestId);
+      const currentItem = needsConfirmation.find(
+        (item) => item.shiftRequest?.id === rejectRequestId
+      );
 
-      return {
-        ...r,
-        status: "OPEN",
+      const result = await ownerRejectRequest(
+        rejectRequestId,
+        {
+          reasonCode: rejectReasonCode,
+          reopenShift,
+        },
+        token
+      );
 
-        // limpiar datos del aceptante anterior
-        acceptedByUid: null,
-        acceptedByName: null,
-        acceptedByPerner: null,
-        pendingAt: null,
+      setNeedsConfirmation((current) =>
+        removeNotificationByRequestId(current, rejectRequestId)
+      );
 
-        // ✅ (opcional) limpiar el decline visible, pero mantiene blockedAcceptors
-        declinedReason: null,
-        declinedAt: null,
+      if (currentItem) {
+        setDeclinedByYou((current) => [
+          createDeclinedNotification(currentItem, rejectReasonCode, result),
+          ...current,
+        ].slice(0, DECLINED_BY_YOU_LIMIT));
+      }
 
-        reopenedAt: new Date().toISOString(),
-      };
-    });
+      closeRejectSheet();
+    } catch (err) {
+      console.error("OWNER REJECT ERROR:", err);
 
-    saveRequests(next);
-    setRefreshKey((k) => k + 1);
+      if (err.status === 409) {
+        closeRejectSheet();
+        alert("This request was already updated or is no longer available.");
+        setNeedsConfirmation((current) =>
+          removeNotificationByRequestId(current, rejectRequestId)
+        );
+        return;
+      }
+
+      alert(err.message || "Failed to reject request.");
+    } finally {
+      setActionId(null);
+    }
   };
+
+  const totalItems = useMemo(() => {
+    return (
+      needsConfirmation.length +
+      declinedByYou.length +
+      updates.length
+    );
+  }, [needsConfirmation, declinedByYou, updates]);
 
   return (
     <div className="page">
       <h1>Inbox</h1>
 
+      {!loading && totalItems === 0 && (
+        <div className="card">
+          <div className="muted">Your inbox is empty.</div>
+        </div>
+      )}
+
       <div className="card">
         <h2 className="section-title">Needs your confirmation</h2>
 
-        {pendingForMe.length === 0 ? (
+        {loading ? (
+          <div className="muted">Loading...</div>
+        ) : needsConfirmation.length === 0 ? (
           <div className="muted">No pending confirmations.</div>
         ) : (
           <div className="list">
-            {pendingForMe.map((r) => (
-              <div key={r.id} className="list-card">
-                <div className="list-title">{r.locationName}</div>
+            {needsConfirmation.map((n) => {
+              const requestId = n.shiftRequest?.id;
+              const actorName = n.actorUser?.firstName || "A cast member";
+              const actorPerner = n.actorUser?.pernerNumber || "N/A";
 
-                <div className="list-sub">
-                  {r.role} · {r.date} · {r.start}-{r.end}
+              return (
+                <div key={n.id} className="list-card">
+                  <div className="list-title">{actorName} wants your shift</div>
+
+                  <div className="list-sub">
+                    PERNER: <b>{actorPerner}</b>
+                  </div>
+
+                  <div className="list-sub">{requestSummary(n)}</div>
+
+                  <div className="divider" />
+
+                  <div className="list-sub">
+                    Please confirm after you complete the process in CastLife.
+                  </div>
+
+                  <div className="row" style={{ gap: 10 }}>
+                    <button
+                      className="btn small confirm"
+                      type="button"
+                      disabled={!requestId || actionId === requestId}
+                      onClick={() => handleOwnerAccept(requestId)}
+                    >
+                      {actionId === requestId ? "Processing..." : "Accept"}
+                    </button>
+
+                    <button
+                      className="btn small danger"
+                      type="button"
+                      disabled={!requestId || actionId === requestId}
+                      onClick={() => openRejectSheet(requestId)}
+                    >
+                      {actionId === requestId ? "Processing..." : "Reject"}
+                    </button>
+                  </div>
                 </div>
-
-                <div className="divider" />
-
-                <div className="list-sub">
-                  <b>{r.acceptedByName || "A cast member"}</b> is waiting for your confirmation.
-                </div>
-
-                <div className="list-sub">
-                  This is the perner number: <b>{r.acceptedByPerner || "N/A"}</b>
-                </div>
-
-                <div className="list-sub">
-                  Please click <b>Accept</b> once you have validated the operation in Cast Life.
-                </div>
-
-                <div className="row" style={{ gap: 10 }}>
-                  <button className="btn small confirm" onClick={() => confirmDone(r)}>
-                    Accept
-                  </button>
-                  <button
-                    className="btn small danger"
-                    onClick={() => startDecline(r)}
-                    type="button"
-                  >
-                    Decline
-                  </button>
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>
@@ -193,31 +273,24 @@ export default function Inbox() {
       <div className="card" style={{ marginTop: 14 }}>
         <h2 className="section-title">Declined by you</h2>
 
-        {declinedByMe.length === 0 ? (
+        {loading ? (
+          <div className="muted">Loading...</div>
+        ) : declinedByYou.length === 0 ? (
           <div className="muted">No declined requests.</div>
         ) : (
           <div className="list">
-            {declinedByMe.map((r) => (
-              <div key={r.id} className="list-card">
-                <div className="list-title">{r.locationName}</div>
-                <div className="list-sub">
-                  {r.role} · {r.date} · {r.start}-{r.end}
+            {declinedByYou.map((n) => (
+              <div key={n.id} className="list-card">
+                <div className="list-title">
+                  {n.actorUser?.firstName || "A cast member"}
                 </div>
+
+                <div className="list-sub">{requestSummary(n)}</div>
 
                 <div className="divider" />
 
                 <div className="list-sub">
-                  Reason: <b>{r.declinedReason || "N/A"}</b>
-                </div>
-
-                <div className="row" style={{ gap: 10 }}>
-                  <button
-                    className="btn small publish"
-                    type="button"
-                    onClick={() => reopenRequest(r)}
-                  >
-                    Re-open
-                  </button>
+                  {formatRejectReason(n.reasonCode) || "You declined this request."}
                 </div>
               </div>
             ))}
@@ -228,92 +301,86 @@ export default function Inbox() {
       <div className="card" style={{ marginTop: 14 }}>
         <h2 className="section-title">Updates</h2>
 
-        {updatesForMe.length === 0 ? (
+        {loading ? (
+          <div className="muted">Loading...</div>
+        ) : updates.length === 0 ? (
           <div className="muted">No updates yet.</div>
         ) : (
           <div className="list">
-            {updatesForMe.map((r) => (
-              <div key={r.id} className="list-card">
-                <div className="list-title">{r.locationName}</div>
-                <div className="list-sub">
-                  {r.role} · {r.date} · {r.start}-{r.end}
+            {updates.map((n) => (
+              <div key={n.id} className="list-card">
+                <div className="list-title">
+                  {n.shiftRequest?.location?.name || "Shift update"}
                 </div>
+
+                <div className="list-sub">{requestSummary(n)}</div>
 
                 <div className="divider" />
 
-                {r.status === "CONFIRMED" ? (
-                  <>
-                    <div className="list-sub">
-                      <b>Congratulations!</b> Your request was confirmed by the creator.
-                    </div>
-                    <div className="list-sub muted">
-                      Please check Cast Life to make sure it went through.
-                    </div>
-                  </>
-                ) : (
-                  <>
-                    <div className="list-sub">
-                      <b>Sorry,</b> the request couldn’t be processed.
-                    </div>
-                    <div className="list-sub">
-                      Reason: <b>{r.declinedReason || "N/A"}</b>
-                    </div>
-                  </>
-                )}
+                <div className="list-sub">{formatUpdateMessage(n)}</div>
               </div>
             ))}
           </div>
         )}
       </div>
 
-      <BottomSheet
-        open={declineOpen}
-        title="Why did you decline?"
-        onClose={() => setDeclineOpen(false)}
-      >
-        <div className="sheet-list" onClick={(e) => e.stopPropagation()}>
-          <div className="label" style={{ marginBottom: 8 }}>
-            Select a reason
-          </div>
+      {rejectSheetOpen && (
+        <div className="sheet-overlay" onClick={closeRejectSheet}>
+          <div className="sheet" onClick={(e) => e.stopPropagation()}>
+            <div className="sheet-handle" />
 
-          <button
-            className={`sheet-item ${declineReason === "OTA" ? "active" : ""}`}
-            type="button"
-            onClick={() => setDeclineReason("OTA")}
-          >
-            OTA
-          </button>
+            <div className="sheet-header">
+              <h2>Select an option</h2>
+              <button
+                className="sheet-close"
+                type="button"
+                onClick={closeRejectSheet}
+              >
+                ✕
+              </button>
+            </div>
 
-          <button
-            className={`sheet-item ${declineReason === "Bad typing" ? "active" : ""}`}
-            type="button"
-            onClick={() => setDeclineReason("Bad typing")}
-          >
-            Bad typing
-          </button>
-
-          <button
-            className={`sheet-item ${declineReason === "Other" ? "active" : ""}`}
-            type="button"
-            onClick={() => setDeclineReason("Other")}
-          >
-            Other
-          </button>
-
-          <div className="row" style={{ gap: 10, marginTop: 12 }}>
-            <button
-              className="btn small danger"
-              type="button"
-              onClick={() => setDeclineOpen(false)}
+            <div className="label">Reason</div>
+            <select
+              className="input"
+              value={rejectReasonCode}
+              onChange={(e) => setRejectReasonCode(e.target.value)}
             >
-              Cancel
-            </button>
-            <button className="btn small confirm" type="button" onClick={submitDecline}>
-              Submit
-            </button>
+              <option value="">Select an option</option>
+              <option value="OVERTIME_LIMIT">Overtime limit</option>
+              <option value="INCORRECT_PERNER">Incorrect PERNER</option>
+              <option value="OTHER">Other</option>
+            </select>
+
+            <div className="label" style={{ marginTop: 12 }}>
+              Reopen this shift?
+            </div>
+            <select
+              className="input"
+              value={reopenShift ? "YES" : "NO"}
+              onChange={(e) => setReopenShift(e.target.value === "YES")}
+            >
+              <option value="YES">Yes</option>
+              <option value="NO">No</option>
+            </select>
+
+            <div className="row" style={{ gap: 10, marginTop: 16 }}>
+              <button
+                className="btn small danger"
+                type="button"
+                disabled={!rejectReasonCode || actionId === rejectRequestId}
+                onClick={handleConfirmReject}
+              >
+                {actionId === rejectRequestId ? "Processing..." : "Confirm reject"}
+              </button>
+
+              <button className="btn small" type="button" onClick={closeRejectSheet}>
+                Cancel
+              </button>
+            </div>
           </div>
         </div>
-      </BottomSheet>
+      )}
     </div>
   );
 }

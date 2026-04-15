@@ -11,6 +11,7 @@ export default function SheetSelect({
   options,
   onChange,
   title = "Select",
+  disabled = false,
 }) {
   const [open, setOpen] = useState(false);
 
@@ -19,17 +20,21 @@ export default function SheetSelect({
     return found ? found.label : "Select…";
   }, [options, value]);
 
+  const handleOpen = () => {
+    if (disabled) return;
+    haptic();
+    setOpen(true);
+  };
+
   return (
     <div>
       {label ? <div className="label">{label}</div> : null}
 
       <button
         type="button"
-        className="input sheet-trigger"
-        onClick={() => {
-          haptic();
-          setOpen(true);
-        }}
+        className={`input sheet-trigger ${disabled ? "disabled" : ""}`}
+        onClick={handleOpen}
+        disabled={disabled}
       >
         <span>{currentLabel}</span>
         <span className="chev">▾</span>
@@ -43,16 +48,20 @@ export default function SheetSelect({
         <div className="sheet-list">
           {options.map((o) => {
             const active = o.value === value;
+            const isOptionDisabled = !!o.disabled;
+
             return (
               <button
                 key={o.value}
                 type="button"
-                className={`sheet-item ${active ? "active" : ""}`}
+                className={`sheet-item ${active ? "active" : ""} ${isOptionDisabled ? "disabled" : ""}`}
                 onClick={() => {
+                  if (isOptionDisabled) return;
                   haptic();
                   onChange(o.value);
                   setOpen(false);
                 }}
+                disabled={isOptionDisabled}
               >
                 <div className="sheet-item-label">{o.label}</div>
                 {active ? <div className="sheet-check">✓</div> : null}

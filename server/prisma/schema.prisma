@@ -7,159 +7,131 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-enum TradeType {
-  SWAP
-  GIVEAWAY
-  PICKUP
-}
-
-enum TradeRequestStatus {
-  OPEN
-  PENDING
-  ACCEPTED
-  REJECTED
-  CANCELED
-  EXPIRED
-}
-
-enum TradeOfferStatus {
-  PENDING
-  ACCEPTED
-  DECLINED
-  CANCELED
-}
-
-enum AssignmentStatus {
-  ASSIGNED
-  RELEASED
-  SWAPPED
-}
-
 model User {
-  id           String   @id @default(uuid())
-  email        String   @unique
-  passwordHash String
-  firstName    String
-  lastName     String
-  pernerNumber Int      @unique
+  id                   String         @id @default(uuid())
+  email                String         @unique
+  passwordHash         String
+  firstName            String
+  lastName             String
+  pernerNumber         String         @unique
+  createdAt            DateTime       @default(now())
+  updatedAt            DateTime       @updatedAt
 
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  ownedRequests        ShiftRequest[] @relation("OwnedRequests")
+  acceptedRequests     ShiftRequest[] @relation("AcceptedRequests")
 
-  assignments   ShiftAssignment[]
-  tradeRequests TradeRequest[] @relation("RequestsByUser")
-  tradeOffers   TradeOffer[]   @relation("OffersByUser")
+  notifications        Notification[] @relation("NotificationsForUser")
+  notificationsSent    Notification[] @relation("NotificationsFromActor")
 
   @@map("users")
 }
 
+model Park {
+  id        String     @id
+  name      String     @unique
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+
+  locations Location[]
+
+  @@map("parks")
+}
+
 model Location {
-  id        String   @id @default(uuid())
+  id        String         @id @default(uuid())
   name      String
-  park      String?
-  createdAt DateTime @default(now())
+  area      String
+  isActive  Boolean        @default(true)
+  createdAt DateTime       @default(now())
+  updatedAt DateTime       @updatedAt
 
-  positions Position[]
-  shifts    Shift[]
+  parkId    String
+  park      Park           @relation(fields: [parkId], references: [id], onDelete: Restrict)
 
-  @@unique([name, park])
+  requests  ShiftRequest[]
+
+  @@unique([parkId, area, name])
+  @@index([parkId, area])
   @@map("locations")
 }
 
-model Position {
-  id        String   @id @default(uuid())
-  name      String
-  createdAt DateTime @default(now())
+model ShiftRequest {
+  id               String             @id @default(uuid())
+  status           ShiftRequestStatus @default(OPEN)
 
-  locationId String
-  location   Location @relation(fields: [locationId], references: [id], onDelete: Cascade)
+  role             String
+  date             String
+  start            String
+  end              String
+  isOvernight      Boolean            @default(false)
 
-  shifts Shift[]
+  startsAt         DateTime
+  
+  createdAt        DateTime           @default(now())
+  updatedAt        DateTime           @updatedAt
+  pendingAt        DateTime?
+  acceptedAt       DateTime?
 
-  @@unique([locationId, name])
-  @@map("positions")
+  locationId       String
+  ownerId          String
+  acceptedByUserId String?
+
+  location         Location           @relation(fields: [locationId], references: [id], onDelete: Restrict)
+  owner            User               @relation("OwnedRequests", fields: [ownerId], references: [id], onDelete: Cascade)
+  acceptedByUser   User?              @relation("AcceptedRequests", fields: [acceptedByUserId], references: [id], onDelete: SetNull)
+
+  notifications    Notification[]
+
+  @@index([locationId, date, status])
+  
+  @@index([ownerId, createdAt])
+  @@index([status, startsAt])
+  @@index([acceptedByUserId, createdAt])
+  @@map("shift_requests")
 }
 
-model Shift {
-  id        String   @id @default(uuid())
-  startAt   DateTime
-  endAt     DateTime
-  notes     String?
-  createdAt DateTime @default(now())
+model Notification {
+  id             String           @id @default(uuid())
+  type           NotificationType
+  createdAt      DateTime         @default(now())
+  readAt         DateTime?
 
-  locationId String
-  location   Location @relation(fields: [locationId], references: [id], onDelete: Cascade)
+  userId         String
+  actorUserId    String?
+  shiftRequestId String?
 
-  positionId String
-  position   Position @relation(fields: [positionId], references: [id], onDelete: Restrict)
+  reasonCode     RejectReason?
 
-  assignments               ShiftAssignment[]
-  tradeRequests             TradeRequest[]
-  tradeOffersAsOfferedShift TradeOffer[]
-
-  @@index([locationId, startAt])
-  @@index([positionId, startAt])
-  @@map("shifts")
-}
-
-model ShiftAssignment {
-  id        String           @id @default(uuid())
-  status    AssignmentStatus @default(ASSIGNED)
-  createdAt DateTime         @default(now())
-
-  shiftId String
-  shift   Shift  @relation(fields: [shiftId], references: [id], onDelete: Cascade)
-
-  userId String
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user           User             @relation("NotificationsForUser", fields: [userId], references: [id], onDelete: Cascade)
+  actorUser      User?            @relation("NotificationsFromActor", fields: [actorUserId], references: [id], onDelete: SetNull)
+  shiftRequest   ShiftRequest?    @relation(fields: [shiftRequestId], references: [id], onDelete: SetNull)
 
   @@index([userId, createdAt])
-  @@index([shiftId, createdAt])
-  @@map("shift_assignments")
+  @@index([type, createdAt])
+  @@index([shiftRequestId])
+  @@index([userId, readAt, createdAt])
+  @@index([userId, type, createdAt], map: "notifications_userId_type_createdAt_idx")
+  @@index([userId, type, readAt, createdAt], map: "notifications_userId_type_readAt_createdAt_idx")
+  @@map("notifications")
 }
 
-model TradeRequest {
-  id        String             @id @default(uuid())
-  type      TradeType
-  status    TradeRequestStatus @default(OPEN)
-  message   String?
-  expiresAt DateTime?
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  // El turno que se ofrece/publica
-  shiftId String
-  shift   Shift  @relation(fields: [shiftId], references: [id], onDelete: Cascade)
-
-  // Quién creó la solicitud
-  requestedByUserId String
-  requestedByUser   User   @relation("RequestsByUser", fields: [requestedByUserId], references: [id], onDelete: Cascade)
-
-  offers TradeOffer[]
-
-  @@index([status, createdAt])
-  @@index([requestedByUserId, createdAt])
-  @@map("trade_requests")
+enum ShiftRequestStatus {
+  OPEN
+  PENDING
+  ACCEPTED
+  CANCELED
+  EXPIRED
 }
 
-model TradeOffer {
-  id        String           @id @default(uuid())
-  status    TradeOfferStatus @default(PENDING)
-  createdAt DateTime         @default(now())
-  updatedAt DateTime         @updatedAt
+enum NotificationType {
+  NEEDS_CONFIRMATION
+  REQUEST_ACCEPTED
+  REQUEST_REJECTED
+  DECLINED_BY_YOU
+}
 
-  tradeRequestId String
-  tradeRequest   TradeRequest @relation(fields: [tradeRequestId], references: [id], onDelete: Cascade)
-
-  offeredByUserId String
-  offeredByUser   User   @relation("OffersByUser", fields: [offeredByUserId], references: [id], onDelete: Cascade)
-
-  // Para SWAP: el turno que ofrece el otro usuario. Para GIVEAWAY/PICKUP: null
-  offeredShiftId String?
-  offeredShift   Shift?  @relation(fields: [offeredShiftId], references: [id], onDelete: SetNull)
-
-  @@index([tradeRequestId, createdAt])
-  @@index([offeredByUserId, createdAt])
-  @@map("trade_offers")
+enum RejectReason {
+  OVERTIME_LIMIT
+  INCORRECT_PERNER
+  OTHER
 }
