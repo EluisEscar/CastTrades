@@ -719,6 +719,12 @@ a {
   color: var(--text);
 }
 
+.sheet-close-danger {
+  border-color: rgba(255, 107, 107, 0.42);
+  background: linear-gradient(135deg, rgba(255, 107, 107, 0.95), rgba(227, 66, 66, 0.9));
+  color: #fff1f1;
+}
+
 .sheet-list {
   display: grid;
   gap: 10px;

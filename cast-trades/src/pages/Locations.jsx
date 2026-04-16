@@ -368,7 +368,7 @@ export default function Locations() {
             <h2 className="section-title">Set the board context</h2>
           </div>
 
-          <button className="ghost-btn" type="button" onClick={onOpenCalendar}>
+          <button className="btn primary" type="button" onClick={onOpenCalendar}>
             Open calendar
           </button>
         </div>

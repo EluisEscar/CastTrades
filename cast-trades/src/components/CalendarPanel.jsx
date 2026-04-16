@@ -26,7 +26,7 @@ export default function CalendarPanel({
             </div>
           </div>
 
-          <button className="sheet-close" type="button" onClick={onClosePanel}>
+          <button className="sheet-close sheet-close-danger" type="button" onClick={onClosePanel}>
             X
           </button>
         </div>
