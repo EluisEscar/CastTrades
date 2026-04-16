@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext.jsx";
 import { todayISO } from "../utils/dateUtils";
@@ -18,27 +18,26 @@ function useQuery() {
   return new URLSearchParams(useLocation().search);
 }
 
-function minutesFromHHMM(t) {
-  const [h, m] = (t || "00:00").split(":").map(Number);
-  return h * 60 + (m || 0);
+function minutesFromHHMM(time) {
+  const [hours, minutes] = (time || "00:00").split(":").map(Number);
+  return hours * 60 + (minutes || 0);
 }
 
 function durationLabel(start, end) {
   let diff = minutesFromHHMM(end) - minutesFromHHMM(start);
   if (diff < 0) diff += 24 * 60;
 
-  const hrs = Math.floor(diff / 60);
-  const mins = diff % 60;
+  const hours = Math.floor(diff / 60);
+  const minutes = diff % 60;
 
-  if (mins === 0) return `${hrs} hrs`;
-  return `${hrs} hrs ${mins} min`;
+  if (minutes === 0) return `${hours} hrs`;
+  return `${hours} hrs ${minutes} min`;
 }
 
 function timeToMinutes(time) {
   if (!time || !time.includes(":")) return null;
 
   const [hours, minutes] = time.split(":").map(Number);
-
   if (Number.isNaN(hours) || Number.isNaN(minutes)) return null;
 
   return hours * 60 + minutes;
@@ -65,6 +64,16 @@ function upsertRequest(requests, nextRequest, filters) {
     const bKey = `${b.date}T${b.start}`;
     return aKey.localeCompare(bKey);
   });
+}
+
+function LoadingLocationCards() {
+  return (
+    <div className="choice-grid">
+      {[0, 1, 2].map((index) => (
+        <div key={index} className="choice-card skeleton-card" aria-hidden="true" />
+      ))}
+    </div>
+  );
 }
 
 export default function Locations() {
@@ -95,20 +104,24 @@ export default function Locations() {
   const [requestsForDay, setRequestsForDay] = useState([]);
   const [loadingRequests, setLoadingRequests] = useState(false);
 
-  const { user, token } = useAuth();
+  const { user } = useAuth();
   const calendarFilters = { parkId, area, calendarDate };
   const skipNextCalendarFetchRef = useRef(false);
 
   const locs = useMemo(() => {
-    return locations.filter((l) => l.parkId === parkId && l.area === area);
+    return locations.filter((locationItem) => locationItem.parkId === parkId && locationItem.area === area);
   }, [locations, parkId, area]);
 
-  const fetchParks = async () => {
-    if (!token) return;
+  const selectedPark = useMemo(() => {
+    return parks.find((park) => park.id === parkId) || null;
+  }, [parks, parkId]);
+
+  const fetchParks = useCallback(async () => {
+    if (!user) return;
 
     try {
       setParksLoading(true);
-      const data = await getParks(token);
+      const data = await getParks();
       setParks(data);
 
       if (!parkId && data.length > 0) {
@@ -120,14 +133,14 @@ export default function Locations() {
     } finally {
       setParksLoading(false);
     }
-  };
+  }, [parkId, user]);
 
-  const fetchLocations = async () => {
-    if (!token || !parkId) return;
+  const fetchLocations = useCallback(async () => {
+    if (!user || !parkId) return;
 
     try {
       setLocationsLoading(true);
-      const data = await getLocations({ parkId, area }, token);
+      const data = await getLocations({ parkId, area });
       setLocations(data);
     } catch (err) {
       console.error("FETCH LOCATIONS ERROR:", err);
@@ -135,14 +148,14 @@ export default function Locations() {
     } finally {
       setLocationsLoading(false);
     }
-  };
+  }, [area, parkId, user]);
 
-  const fetchRequests = async () => {
-    if (!token || !parkId) return;
+  const fetchRequests = useCallback(async () => {
+    if (!user || !parkId) return;
 
     try {
       setLoadingRequests(true);
-      const data = await getRequests({ parkId, area, date: calendarDate }, token);
+      const data = await getRequests({ parkId, area, date: calendarDate });
       setRequestsForDay(data);
     } catch (err) {
       console.error("FETCH REQUESTS ERROR:", err);
@@ -150,15 +163,15 @@ export default function Locations() {
     } finally {
       setLoadingRequests(false);
     }
-  };
+  }, [area, calendarDate, parkId, user]);
 
   useEffect(() => {
     fetchParks();
-  }, [token]);
+  }, [fetchParks]);
 
   useEffect(() => {
     fetchLocations();
-  }, [token, parkId, area]);
+  }, [fetchLocations]);
 
   useEffect(() => {
     if (activeView !== "calendar") return;
@@ -167,7 +180,7 @@ export default function Locations() {
       return;
     }
     fetchRequests();
-  }, [token, parkId, area, calendarDate, activeView]);
+  }, [activeView, fetchRequests]);
 
   const resetForm = () => {
     setRole("");
@@ -178,8 +191,8 @@ export default function Locations() {
     setEditingRequestId(null);
   };
 
-  const onOpenCreate = (location) => {
-    setSelectedLocation(location);
+  const onOpenCreate = (locationItem) => {
+    setSelectedLocation(locationItem);
     resetForm();
     setActiveView("create");
   };
@@ -248,9 +261,9 @@ export default function Locations() {
       let savedRequest;
 
       if (editingRequestId) {
-        savedRequest = await updateRequest(editingRequestId, payload, token);
+        savedRequest = await updateRequest(editingRequestId, payload);
       } else {
-        savedRequest = await createRequest(payload, token);
+        savedRequest = await createRequest(payload);
       }
 
       skipNextCalendarFetchRef.current = true;
@@ -264,19 +277,21 @@ export default function Locations() {
     }
   };
 
-  const onAccept = async (req) => {
-    if (!user?.id || !token) return;
-    if (req.ownerId === user.id) return;
+  const onAccept = async (requestItem) => {
+    if (!user?.id) return;
+    if (requestItem.ownerId === user.id) return;
 
     try {
-      const updatedRequest = await acceptRequest(req.id, token);
+      const updatedRequest = await acceptRequest(requestItem.id);
       setRequestsForDay((current) => upsertRequest(current, updatedRequest, calendarFilters));
     } catch (err) {
       console.error("ACCEPT REQUEST ERROR:", err);
 
       if (err.status === 409) {
         alert("This shift is no longer available.");
-        setRequestsForDay((current) => current.filter((request) => request.id !== req.id));
+        setRequestsForDay((current) =>
+          current.filter((requestItemCurrent) => requestItemCurrent.id !== requestItem.id)
+        );
         return;
       }
 
@@ -284,46 +299,83 @@ export default function Locations() {
     }
   };
 
-  const onDelete = async (req) => {
-    if (!user?.id || !token) return;
-    if (req.ownerId !== user.id) return;
+  const onDelete = async (requestItem) => {
+    if (!user?.id) return;
+    if (requestItem.ownerId !== user.id) return;
 
     const ok = window.confirm("Delete this request?");
     if (!ok) return;
 
     try {
-      await deleteRequest(req.id, token);
-      setRequestsForDay((current) => current.filter((request) => request.id !== req.id));
+      await deleteRequest(requestItem.id);
+      setRequestsForDay((current) =>
+        current.filter((requestItemCurrent) => requestItemCurrent.id !== requestItem.id)
+      );
     } catch (err) {
       console.error("DELETE REQUEST ERROR:", err);
     }
   };
 
-  const onEdit = (req) => {
+  const onEdit = (requestItem) => {
     if (!user?.id) return;
-    if (req.ownerId !== user.id) return;
+    if (requestItem.ownerId !== user.id) return;
 
-    const loc = locations.find((l) => l.id === req.locationId);
-    if (!loc) return;
+    const matchedLocation = locations.find((locationItem) => locationItem.id === requestItem.locationId);
+    if (!matchedLocation) return;
 
-    setSelectedLocation(loc);
-    setRole(req.role || "");
-    setDate(req.date || todayISO());
-    setStart(req.start || "");
-    setEnd(req.end || "");
+    setSelectedLocation(matchedLocation);
+    setRole(requestItem.role || "");
+    setDate(requestItem.date || todayISO());
+    setStart(requestItem.start || "");
+    setEnd(requestItem.end || "");
     setFormError("");
-    setEditingRequestId(req.id);
+    setEditingRequestId(requestItem.id);
     setActiveView("create");
   };
 
   return (
     <div className="page">
-      <h1>Locations</h1>
+      <section className="hero-card">
+        <div className="eyebrow">Locations Board</div>
+        <h1>{selectedPark?.name || "Choose a park"} coverage board.</h1>
+        <p className="hero-copy">
+          Browse active locations, create a request in one tap, and switch to the
+          calendar overlay when you want the full daily view.
+        </p>
 
-      <div className="card">
-        <div className="row">
+        <div className="metric-row">
+          <div className="metric-card">
+            <span className="metric-label">Active area</span>
+            <strong>{area}</strong>
+          </div>
+
+          <div className="metric-card">
+            <span className="metric-label">Locations</span>
+            <strong>{locationsLoading ? "..." : locs.length}</strong>
+          </div>
+
+          <div className="metric-card">
+            <span className="metric-label">Open on {calendarDate}</span>
+            <strong>{loadingRequests ? "..." : requestsForDay.length}</strong>
+          </div>
+        </div>
+      </section>
+
+      <section className="card">
+        <div className="section-header">
           <div>
-            <div className="label">Park</div>
+            <div className="eyebrow">Filters</div>
+            <h2 className="section-title">Set the board context</h2>
+          </div>
+
+          <button className="ghost-btn" type="button" onClick={onOpenCalendar}>
+            Open calendar
+          </button>
+        </div>
+
+        <div className="control-grid">
+          <label className="field-stack">
+            <span className="label">Park</span>
             <select
               className="input"
               value={parkId}
@@ -340,10 +392,10 @@ export default function Locations() {
                 </option>
               ))}
             </select>
-          </div>
+          </label>
 
-          <div>
-            <div className="label">Area</div>
+          <label className="field-stack">
+            <span className="label">Area</span>
             <select
               className="input"
               value={area}
@@ -355,33 +407,59 @@ export default function Locations() {
             >
               <option value="Merch">Merch</option>
             </select>
+          </label>
+        </div>
+
+        <div className="inline-banner">
+          <div>
+            <div className="eyebrow">Quick action</div>
+            <div className="banner-title">
+              {selectedLocation
+                ? `${selectedLocation.name} is ready for a new request.`
+                : "Pick a location card to create or edit a request."}
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section className="card">
+        <div className="section-header">
+          <div>
+            <div className="eyebrow">Available spots</div>
+            <h2 className="section-title">Tap a location to compose a request</h2>
           </div>
         </div>
 
-        <div className="list">
-          {locationsLoading ? (
-            <div className="list-sub">Loading locations...</div>
-          ) : locs.length === 0 ? (
-            <div className="list-sub">No locations found.</div>
-          ) : (
-            locs.map((l) => (
-              <button
-                key={l.id}
-                className="list-item"
-                type="button"
-                onClick={() => onOpenCreate(l)}
-              >
-                <div className="list-title">{l.name}</div>
-                <div className="list-sub">Tap to create request</div>
-              </button>
-            ))
-          )}
-        </div>
+        {locationsLoading ? (
+          <LoadingLocationCards />
+        ) : locs.length === 0 ? (
+          <div className="empty-state">
+            <div className="empty-title">No locations found.</div>
+            <div className="muted">Try a different park or wait for the API to populate data.</div>
+          </div>
+        ) : (
+          <div className="choice-grid">
+            {locs.map((locationItem) => {
+              const isActive = selectedLocation?.id === locationItem.id && activeView === "create";
 
-        <button className="btn" type="button" onClick={onOpenCalendar}>
-          View Requests Calendar
-        </button>
-      </div>
+              return (
+                <button
+                  key={locationItem.id}
+                  className={`choice-card ${isActive ? "active" : ""}`}
+                  type="button"
+                  onClick={() => onOpenCreate(locationItem)}
+                >
+                  <div className="choice-kicker">{locationItem.area}</div>
+                  <div className="choice-title">{locationItem.name}</div>
+                  <div className="choice-meta">
+                    {isActive ? "Composer open for this location." : "Open request composer."}
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        )}
+      </section>
 
       {activeView === "create" && selectedLocation && (
         <CreateRequestPanel

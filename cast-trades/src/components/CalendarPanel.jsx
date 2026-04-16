@@ -19,15 +19,33 @@ export default function CalendarPanel({
         <div className="sheet-handle" />
 
         <div className="sheet-header">
-          <h2>Requests Calendar</h2>
+          <div>
+            <h2>Requests calendar</h2>
+            <div className="sheet-lead">
+              Review open shifts for the selected day and act without leaving the board.
+            </div>
+          </div>
+
           <button className="sheet-close" type="button" onClick={onClosePanel}>
-            ✕
+            X
           </button>
+        </div>
+
+        <div className="metric-row">
+          <div className="metric-card">
+            <span className="metric-label">Visible requests</span>
+            <strong>{loading ? "..." : requestsForDay.length}</strong>
+          </div>
+
+          <div className="metric-card">
+            <span className="metric-label">Mode</span>
+            <strong>{user?.firstName ? `${user.firstName}'s board` : "Board"}</strong>
+          </div>
         </div>
 
         <DateSheet
           label="Select day"
-          title="Select Date"
+          title="Select date"
           value={calendarDate}
           onChange={setCalendarDate}
         />
@@ -35,50 +53,53 @@ export default function CalendarPanel({
         <div className="divider" />
 
         {loading ? (
-          <div className="muted">Loading...</div>
+          <div className="list">
+            {[0, 1].map((index) => (
+              <div key={index} className="list-card skeleton-card" aria-hidden="true" />
+            ))}
+          </div>
         ) : requestsForDay.length === 0 ? (
-          <div className="muted">No requests available for this day.</div>
+          <div className="empty-state">
+            <div className="empty-title">No requests for this day.</div>
+            <div className="muted">Try another date or publish a new request.</div>
+          </div>
         ) : (
           <div className="list">
-            {requestsForDay.map((r) => {
-              const isMine = !!user?.id && r.ownerId === user.id;
+            {requestsForDay.map((requestItem) => {
+              const isMine = !!user?.id && requestItem.ownerId === user.id;
 
               return (
-                <div key={r.id} className="list-card">
+                <div key={requestItem.id} className="list-card">
                   <div className="list-row">
                     <div className="list-title">
-                      {r.location?.name || "Unknown location"}
+                      {requestItem.location?.name || "Unknown location"}
                     </div>
 
                     <div className="list-right">
-                      <span className="pill-mini">{r.role}</span>
+                      <span className="pill-mini">{requestItem.role}</span>
                       <span className="time-mini">
-                        {r.start}-{r.end}
+                        {requestItem.start}-{requestItem.end}
                       </span>
                     </div>
                   </div>
 
-                  <div className="list-sub">
-                    {durationLabel(r.start, r.end)}
-                  </div>
+                  <div className="list-sub">{durationLabel(requestItem.start, requestItem.end)}</div>
 
-                  <div className="row" style={{ gap: 10 }}>
-                    {!isMine && (
+                  <div className="action-row">
+                    {!isMine ? (
                       <button
                         className="btn small accept"
                         type="button"
-                        onClick={() => onAccept(r)}
+                        onClick={() => onAccept(requestItem)}
                       >
                         Accept
                       </button>
-                    )}
-
-                    {isMine && (
+                    ) : (
                       <>
                         <button
                           className="btn small edit"
                           type="button"
-                          onClick={() => onEdit(r)}
+                          onClick={() => onEdit(requestItem)}
                         >
                           Edit
                         </button>
@@ -86,7 +107,7 @@ export default function CalendarPanel({
                         <button
                           className="btn small danger"
                           type="button"
-                          onClick={() => onDelete(r)}
+                          onClick={() => onDelete(requestItem)}
                         >
                           Delete
                         </button>

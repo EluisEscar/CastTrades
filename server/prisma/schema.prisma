@@ -14,6 +14,8 @@ model User {
   firstName            String
   lastName             String
   pernerNumber         String         @unique
+  role                 UserRole       @default(USER)
+  isActive             Boolean        @default(true)
   createdAt            DateTime       @default(now())
   updatedAt            DateTime       @updatedAt
 
@@ -22,6 +24,7 @@ model User {
 
   notifications        Notification[] @relation("NotificationsForUser")
   notificationsSent    Notification[] @relation("NotificationsFromActor")
+  auditLogsAuthored    AuditLog[]
 
   @@map("users")
 }
@@ -29,6 +32,7 @@ model User {
 model Park {
   id        String     @id
   name      String     @unique
+  isActive  Boolean    @default(true)
   createdAt DateTime   @default(now())
   updatedAt DateTime   @updatedAt
 
@@ -113,6 +117,46 @@ model Notification {
   @@index([userId, type, createdAt], map: "notifications_userId_type_createdAt_idx")
   @@index([userId, type, readAt, createdAt], map: "notifications_userId_type_readAt_createdAt_idx")
   @@map("notifications")
+}
+
+model AuditLog {
+  id          String          @id @default(uuid())
+  action      AuditAction
+  entityType  AuditEntityType
+  entityId    String?
+  details     Json?
+  createdAt   DateTime        @default(now())
+
+  actorUserId String?
+  actorUser   User?           @relation(fields: [actorUserId], references: [id], onDelete: SetNull)
+
+  @@index([actorUserId, createdAt])
+  @@index([entityType, entityId, createdAt])
+  @@index([createdAt])
+  @@map("audit_logs")
+}
+
+enum UserRole {
+  USER
+  ADMIN
+  SUPERADMIN
+}
+
+enum AuditAction {
+  CREATE
+  UPDATE
+  ACTIVATE
+  DEACTIVATE
+  CANCEL
+  REOPEN
+  ROLE_CHANGE
+}
+
+enum AuditEntityType {
+  USER
+  PARK
+  LOCATION
+  REQUEST
 }
 
 enum ShiftRequestStatus {

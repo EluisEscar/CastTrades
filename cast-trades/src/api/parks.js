@@ -1,7 +1,14 @@
+import { apiFetch, parseResponse } from "./http.js";
+
 let parksCache = null;
 let parksPromise = null;
 
-export async function getParks(token) {
+export function invalidateParksCache() {
+  parksCache = null;
+  parksPromise = null;
+}
+
+export async function getParks() {
   if (parksCache) {
     return parksCache;
   }
@@ -10,18 +17,9 @@ export async function getParks(token) {
     return parksPromise;
   }
 
-  parksPromise = fetch("/parks", {
-    headers: {
-      Authorization: `Bearer ${token}`,
-    },
-  })
-    .then(async (r) => {
-      const data = await r.json();
-
-      if (!r.ok) {
-        throw new Error(data.error || "Failed to fetch parks");
-      }
-
+  parksPromise = apiFetch("/parks")
+    .then((r) => parseResponse(r, "Failed to fetch parks"))
+    .then((data) => {
       parksCache = data;
       return data;
     })

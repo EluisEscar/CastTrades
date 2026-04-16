@@ -8,6 +8,8 @@ import Inbox from "./pages/Inbox.jsx";
 import Login from "./pages/Login.jsx";
 import Register from "./pages/Register.jsx";
 import RequireAuth from "./auth/RequireAuth.jsx";
+import RequireAdmin from "./auth/RequireAdmin.jsx";
+import Admin from "./pages/Admin.jsx";
 
 export default function App() {
   return (
@@ -26,6 +28,14 @@ export default function App() {
         <Route path="/locations" element={<Locations />} />
         <Route path="/inbox" element={<Inbox />} />
         <Route path="/profile" element={<Profile />} />
+        <Route
+          path="/admin"
+          element={
+            <RequireAdmin>
+              <Admin />
+            </RequireAdmin>
+          }
+        />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>
     </Routes>

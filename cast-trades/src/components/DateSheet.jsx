@@ -2,31 +2,34 @@ import React, { useRef, useState } from "react";
 import BottomSheet from "./BottomSheet.jsx";
 import { todayISO } from "../utils/dateUtils";
 
-function pretty(iso) {
+function formatDate(iso) {
   if (!iso) return "";
-  const [y, m, d] = iso.split("-");
-  return `${d}/${m}/${y}`;
+  const [year, month, day] = iso.split("-");
+  return `${day}/${month}/${year}`;
 }
 
-export default function DateSheetNative({
-  label = "Fecha",
-  title = "Select Date",
+export default function DateSheet({
+  label = "Date",
+  title = "Select date",
   value,
   onChange,
 }) {
   const [open, setOpen] = useState(false);
   const inputRef = useRef(null);
 
-  const minDate = todayISO(); 
-  const openNativePicker = () => {
-    const el = inputRef.current;
-    if (!el) return;
+  const minDate = todayISO();
 
-    if (typeof el.showPicker === "function") el.showPicker();
-    else {
-      el.focus();
-      el.click();
+  const openNativePicker = () => {
+    const input = inputRef.current;
+    if (!input) return;
+
+    if (typeof input.showPicker === "function") {
+      input.showPicker();
+      return;
     }
+
+    input.focus();
+    input.click();
   };
 
   return (
@@ -38,29 +41,27 @@ export default function DateSheetNative({
         className="input sheet-trigger"
         onClick={() => {
           setOpen(true);
-          setTimeout(openNativePicker, 80);
+          setTimeout(openNativePicker, 60);
         }}
       >
-        <span>{pretty(value) || "DD/MM/YYYY"}</span>
-        <span className="chev">▾</span>
+        <span>{formatDate(value) || "DD/MM/YYYY"}</span>
+        <span className="chev">v</span>
       </button>
 
       <BottomSheet open={open} title={title} onClose={() => setOpen(false)}>
         <div className="sheet-list" onClick={(e) => e.stopPropagation()}>
-          <div className="label" style={{ marginBottom: 8 }}>
-            Pick a date
-          </div>
+          <div className="label">Pick a date</div>
 
           <input
             ref={inputRef}
             className="input"
             type="date"
             value={value}
-            min={minDate} 
+            min={minDate}
             onChange={(e) => {
-              const picked = e.target.value;
-              if (picked && picked >= minDate) {
-                onChange(picked);
+              const nextValue = e.target.value;
+              if (nextValue && nextValue >= minDate) {
+                onChange(nextValue);
               }
             }}
             onClick={(e) => e.stopPropagation()}
@@ -68,11 +69,7 @@ export default function DateSheetNative({
             onTouchStart={(e) => e.stopPropagation()}
           />
 
-          <button
-            className="btn publish"
-            type="button"
-            onClick={() => setOpen(false)}
-          >
+          <button className="btn publish" type="button" onClick={() => setOpen(false)}>
             Done
           </button>
         </div>

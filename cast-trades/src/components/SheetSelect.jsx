@@ -1,9 +1,9 @@
 import React, { useMemo, useState } from "react";
 import BottomSheet from "./BottomSheet.jsx";
 
-const haptic = () => {
+function haptic() {
   if (navigator.vibrate) navigator.vibrate(10);
-};
+}
 
 export default function SheetSelect({
   label,
@@ -16,8 +16,8 @@ export default function SheetSelect({
   const [open, setOpen] = useState(false);
 
   const currentLabel = useMemo(() => {
-    const found = options.find((o) => o.value === value);
-    return found ? found.label : "Select…";
+    const currentOption = options.find((option) => option.value === value);
+    return currentOption ? currentOption.label : "Select...";
   }, [options, value]);
 
   const handleOpen = () => {
@@ -37,34 +37,30 @@ export default function SheetSelect({
         disabled={disabled}
       >
         <span>{currentLabel}</span>
-        <span className="chev">▾</span>
+        <span className="chev">v</span>
       </button>
 
-      <BottomSheet
-        open={open}
-        title={title}
-        onClose={() => setOpen(false)}
-      >
+      <BottomSheet open={open} title={title} onClose={() => setOpen(false)}>
         <div className="sheet-list">
-          {options.map((o) => {
-            const active = o.value === value;
-            const isOptionDisabled = !!o.disabled;
+          {options.map((option) => {
+            const active = option.value === value;
+            const isOptionDisabled = !!option.disabled;
 
             return (
               <button
-                key={o.value}
+                key={option.value}
                 type="button"
                 className={`sheet-item ${active ? "active" : ""} ${isOptionDisabled ? "disabled" : ""}`}
                 onClick={() => {
                   if (isOptionDisabled) return;
                   haptic();
-                  onChange(o.value);
+                  onChange(option.value);
                   setOpen(false);
                 }}
                 disabled={isOptionDisabled}
               >
-                <div className="sheet-item-label">{o.label}</div>
-                {active ? <div className="sheet-check">✓</div> : null}
+                <div className="sheet-item-label">{option.label}</div>
+                {active ? <div className="sheet-check">OK</div> : null}
               </button>
             );
           })}

@@ -1,7 +1,14 @@
+import { apiFetch, parseResponse } from "./http.js";
+
 const locationsCache = new Map();
 const locationsPromises = new Map();
 
-export async function getLocations({ parkId, area }, token) {
+export function invalidateLocationsCache() {
+  locationsCache.clear();
+  locationsPromises.clear();
+}
+
+export async function getLocations({ parkId, area }) {
   const params = new URLSearchParams();
 
   if (parkId) params.set("parkId", parkId);
@@ -17,18 +24,9 @@ export async function getLocations({ parkId, area }, token) {
     return locationsPromises.get(cacheKey);
   }
 
-  const request = fetch(`/locations?${cacheKey}`, {
-    headers: {
-      Authorization: `Bearer ${token}`,
-    },
-  })
-    .then(async (r) => {
-      const data = await r.json();
-
-      if (!r.ok) {
-        throw new Error(data.error || "Failed to fetch locations");
-      }
-
+  const request = apiFetch(`/locations?${cacheKey}`)
+    .then((r) => parseResponse(r, "Failed to fetch locations"))
+    .then((data) => {
       locationsCache.set(cacheKey, data);
       return data;
     })

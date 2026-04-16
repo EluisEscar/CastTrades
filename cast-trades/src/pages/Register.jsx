@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext.jsx";
+import AuthFrame from "../components/AuthFrame.jsx";
 
 export default function Register() {
   const { register } = useAuth();
@@ -19,13 +20,13 @@ export default function Register() {
 
     const pernerValue = perner.trim();
 
-    if (!/^\d+$/.test(pernerValue)) {
-      setErr("Perner number must contain only digits.");
+    if (!/^\d{8}$/.test(pernerValue)) {
+      setErr("Perner number must contain exactly 8 digits.");
       return;
     }
 
-    if (!password || password.length < 6) {
-      setErr("Password must be at least 6 characters.");
+    if (!password || password.length < 8) {
+      setErr("Password must be at least 8 characters.");
       return;
     }
 
@@ -40,82 +41,96 @@ export default function Register() {
     try {
       await register(payload);
       navigate("/", { replace: true });
-    } catch (e2) {
-      setErr(e2.message || "Register failed");
+    } catch (error) {
+      setErr(error.message || "Register failed");
     }
   };
 
   return (
-    <div className="auth-page">
-      <div className="auth-card">
-        <form className="card" onSubmit={onSubmit}>
-          <div className="auth-title">Register</div>
-
-          <div className="row">
-            <div style={{ flex: 1 }}>
-              <div className="label">Name</div>
-              <input
-                className="input"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                required
-              />
-            </div>
-            <div style={{ flex: 1 }}>
-              <div className="label">Last name</div>
-              <input
-                className="input"
-                value={lastName}
-                onChange={(e) => setLastName(e.target.value)}
-                required
-              />
-            </div>
+    <AuthFrame
+      eyebrow="New Session"
+      title="Create account"
+      description="Set up your access once and manage request creation, approvals, and updates from the same board."
+      footer={
+        <>
+          Already registered?{" "}
+          <Link className="link" to="/login">
+            Sign in
+          </Link>
+        </>
+      }
+    >
+      <form className="auth-form-grid" onSubmit={onSubmit}>
+        <div className="split-grid">
+          <div>
+            <div className="label">First name</div>
+            <input
+              className="input"
+              value={name}
+              maxLength={80}
+              onChange={(e) => setName(e.target.value)}
+              required
+            />
           </div>
 
-          <div className="label">Email</div>
-          <input
-            className="input"
-            type="email"
-            placeholder="name@email.com"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            required
-          />
-
-          <div className="label">Password</div>
-          <input
-            className="input"
-            type="password"
-            placeholder="••••••••"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            required
-          />
-
-          <div className="label">Perner number</div>
-          <input
-            className="input"
-            inputMode="numeric"
-            placeholder="123456"
-            value={perner}
-            onChange={(e) => setPerner(e.target.value)}
-            required
-          />
-
-          {err ? <div className="error">{err}</div> : null}
-
-          <button className="btn publish" type="submit">
-            Register
-          </button>
-
-          <div className="hint" style={{ textAlign: "center" }}>
-            Already have an account?{" "}
-            <Link className="link" to="/login">
-              Login
-            </Link>
+          <div>
+            <div className="label">Last name</div>
+            <input
+              className="input"
+              value={lastName}
+              maxLength={80}
+              onChange={(e) => setLastName(e.target.value)}
+              required
+            />
           </div>
-        </form>
-      </div>
-    </div>
+        </div>
+
+        <div className="label">Email</div>
+        <input
+          className="input"
+          type="email"
+          placeholder="name@email.com"
+          value={email}
+          maxLength={254}
+          onChange={(e) => setEmail(e.target.value)}
+          required
+        />
+
+        <div className="split-grid">
+          <div>
+            <div className="label">Password</div>
+            <input
+              className="input"
+              type="password"
+              placeholder="........"
+              value={password}
+              minLength={8}
+              maxLength={72}
+              onChange={(e) => setPassword(e.target.value)}
+              required
+            />
+          </div>
+
+          <div>
+            <div className="label">PERNER</div>
+            <input
+              className="input"
+              inputMode="numeric"
+              placeholder="12345678"
+              value={perner}
+              maxLength={8}
+              onChange={(e) => setPerner(e.target.value)}
+              required
+            />
+          </div>
+        </div>
+
+        {err ? <div className="error">{err}</div> : null}
+
+        <button className="btn publish" type="submit">
+          Create workspace
+        </button>
+      </form>
+    </AuthFrame>
   );
 }

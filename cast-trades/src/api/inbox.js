@@ -1,56 +1,34 @@
-async function parseResponse(r, fallbackMessage) {
-  const data = await r.json().catch(() => ({}));
-
-  if (!r.ok) {
-    const err = new Error(data.error || fallbackMessage);
-    err.status = r.status;
-    err.data = data;
-    throw err;
-  }
-
-  return data;
-}
+import { apiFetch, parseResponse } from "./http.js";
 
 let inboxPromise = null;
-let inboxPromiseToken = null;
 
-export async function getInbox(token) {
-  if (inboxPromise && inboxPromiseToken === token) {
+export async function getInbox() {
+  if (inboxPromise) {
     return inboxPromise;
   }
 
-  inboxPromiseToken = token;
-  inboxPromise = fetch("/inbox", {
-    headers: {
-      Authorization: `Bearer ${token}`,
-    },
-  })
+  inboxPromise = apiFetch("/inbox")
     .then((r) => parseResponse(r, "Failed to fetch inbox"))
     .finally(() => {
       inboxPromise = null;
-      inboxPromiseToken = null;
     });
 
   return inboxPromise;
 }
 
-export async function ownerAcceptRequest(id, token) {
-  const r = await fetch(`/requests/${id}/owner-accept`, {
+export async function ownerAcceptRequest(id) {
+  const r = await apiFetch(`/requests/${id}/owner-accept`, {
     method: "POST",
-    headers: {
-      Authorization: `Bearer ${token}`,
-    },
   });
 
   return parseResponse(r, "Failed to approve request");
 }
 
-export async function ownerRejectRequest(id, payload, token) {
-  const r = await fetch(`/requests/${id}/owner-reject`, {
+export async function ownerRejectRequest(id, payload) {
+  const r = await apiFetch(`/requests/${id}/owner-reject`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      Authorization: `Bearer ${token}`,
     },
     body: JSON.stringify(payload),
   });

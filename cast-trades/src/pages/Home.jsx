@@ -1,26 +1,36 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { getParks } from "../api/parks.js";
 import { useAuth } from "../auth/AuthContext.jsx";
+
+function LoadingChoices() {
+  return (
+    <div className="choice-grid">
+      {[0, 1, 2].map((index) => (
+        <div key={index} className="choice-card skeleton-card" aria-hidden="true" />
+      ))}
+    </div>
+  );
+}
 
 export default function Home() {
   const [parks, setParks] = useState([]);
   const [selectedPark, setSelectedPark] = useState("");
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
-  const { token } = useAuth();
+  const { user } = useAuth();
 
   useEffect(() => {
     const fetchParks = async () => {
-      if (!token) return;
+      if (!user) return;
 
       try {
         setLoading(true);
-        const data = await getParks(token);
+        const data = await getParks();
         setParks(data);
 
         if (data.length > 0) {
-          setSelectedPark(data[0].id);
+          setSelectedPark((current) => current || data[0].id);
         }
       } catch (err) {
         console.error("FETCH PARKS ERROR:", err);
@@ -31,7 +41,11 @@ export default function Home() {
     };
 
     fetchParks();
-  }, [token]);
+  }, [user]);
+
+  const selectedParkData = useMemo(() => {
+    return parks.find((park) => park.id === selectedPark) || null;
+  }, [parks, selectedPark]);
 
   const handleContinue = () => {
     if (!selectedPark) return;
@@ -40,41 +54,64 @@ export default function Home() {
 
   return (
     <div className="page">
-      <h1>Choose Park</h1>
+      <section className="card">
+        <div className="section-header park-selector-header">
+          <div>
+            <div className="eyebrow">Park Selector</div>
+            <h2 className="section-title">Where are you picking up?</h2>
+            <div className="choice-meta park-selector-meta">
+              {selectedParkData
+                ? `Open ${selectedParkData.name} and start managing requests.`
+                : "Pick a park to continue."}
+            </div>
+          </div>
 
-      <div className="card">
-        <label className="label">Park</label>
+          <button
+            className="btn primary"
+            type="button"
+            onClick={handleContinue}
+            disabled={!selectedPark}
+          >
+            Open locations board
+          </button>
+        </div>
 
-        <select
-          className="input"
-          value={selectedPark}
-          onChange={(e) => setSelectedPark(e.target.value)}
-          disabled={loading || parks.length === 0}
-        >
-          {parks.length === 0 ? (
-            <option value="">
-              {loading ? "Loading parks..." : "No parks available"}
-            </option>
-          ) : (
-            parks.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.name}
-              </option>
-            ))
-          )}
-        </select>
+        {loading ? (
+          <LoadingChoices />
+        ) : parks.length === 0 ? (
+          <div className="empty-state">
+            <div className="empty-title">No parks available.</div>
+            <div className="muted">The board will appear here once the API responds.</div>
+          </div>
+        ) : (
+          <div className="choice-grid">
+            {parks.map((park) => {
+              const isActive = park.id === selectedPark;
 
-        <button
-          className="btn primary"
-          onClick={handleContinue}
-          disabled={!selectedPark}
-        >
-          View locations
-        </button>
-      </div>
+              return (
+                <button
+                  key={park.id}
+                  type="button"
+                  className={`choice-card ${isActive ? "active" : ""}`}
+                  onClick={() => setSelectedPark(park.id)}
+                >
+                  <div className="choice-kicker">{isActive ? "Selected" : "Available"}</div>
+                  <div className="choice-title">{park.name}</div>
+                  <div className="choice-meta">
+                    {isActive ? "Ready to open the locations board." : "Tap to focus this park."}
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        )}
+      </section>
 
-      <div className="hint">
-        Tip: Safari → Share → “Add to Home Screen”.
+      <div className="hint-card">
+        <div className="eyebrow">Mobile hint</div>
+        <div className="muted">
+          On iPhone, use Share then Add to Home Screen if you want this to feel more like an app.
+        </div>
       </div>
     </div>
   );

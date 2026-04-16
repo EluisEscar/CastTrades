@@ -12,10 +12,9 @@ function requestSummary(notification) {
   const req = notification?.shiftRequest;
   const locationName = req?.location?.name || "Unknown location";
   const role = req?.role || "Unknown role";
-  const timeRange =
-    req?.start && req?.end ? `${req.start}-${req.end}` : "Unknown time";
+  const timeRange = req?.start && req?.end ? `${req.start}-${req.end}` : "Unknown time";
 
-  return `${locationName} • ${role} • ${timeRange}`;
+  return `${locationName} | ${role} | ${timeRange}`;
 }
 
 function formatRejectReason(reasonCode) {
@@ -32,12 +31,11 @@ function formatRejectReason(reasonCode) {
 }
 
 function formatUpdateMessage(notification) {
-  const locationName =
-    notification?.shiftRequest?.location?.name || "this shift";
+  const locationName = notification?.shiftRequest?.location?.name || "this shift";
 
   switch (notification?.type) {
     case "REQUEST_ACCEPTED":
-      return `Your request for ${locationName} was accepted. Please verify it in CastLife.`;
+      return `Your request for ${locationName} was accepted. Verify it in CastLife.`;
     case "REQUEST_REJECTED":
       return `Your request for ${locationName} was declined. ${formatRejectReason(
         notification?.reasonCode
@@ -69,8 +67,25 @@ function createDeclinedNotification(item, reasonCode, shiftRequest) {
   };
 }
 
+function SectionBlock({ title, count, description, children }) {
+  return (
+    <section className="card stack-section">
+      <div className="section-header">
+        <div>
+          <h2 className="section-title">{title}</h2>
+          <div className="muted">{description}</div>
+        </div>
+
+        <div className="count-pill">{count}</div>
+      </div>
+
+      {children}
+    </section>
+  );
+}
+
 export default function Inbox() {
-  const { token } = useAuth();
+  const { user } = useAuth();
 
   const [loading, setLoading] = useState(false);
   const [actionId, setActionId] = useState(null);
@@ -85,11 +100,11 @@ export default function Inbox() {
   const [reopenShift, setReopenShift] = useState(true);
 
   const fetchInboxData = useCallback(async () => {
-    if (!token) return;
+    if (!user) return;
 
     try {
       setLoading(true);
-      const data = await getInbox(token);
+      const data = await getInbox();
 
       setNeedsConfirmation((data?.needsConfirmation || []).filter(isValidNotificationItem));
       setDeclinedByYou((data?.declinedByYou || []).filter(isValidNotificationItem));
@@ -102,29 +117,25 @@ export default function Inbox() {
     } finally {
       setLoading(false);
     }
-  }, [token]);
+  }, [user]);
 
   useEffect(() => {
     fetchInboxData();
   }, [fetchInboxData]);
 
   const handleOwnerAccept = async (requestId) => {
-    if (!token || !requestId) return;
+    if (!user || !requestId) return;
 
     try {
       setActionId(requestId);
-      await ownerAcceptRequest(requestId, token);
-      setNeedsConfirmation((current) =>
-        removeNotificationByRequestId(current, requestId)
-      );
+      await ownerAcceptRequest(requestId);
+      setNeedsConfirmation((current) => removeNotificationByRequestId(current, requestId));
     } catch (err) {
       console.error("OWNER ACCEPT ERROR:", err);
 
       if (err.status === 409) {
         alert("This request was already updated or is no longer available.");
-        setNeedsConfirmation((current) =>
-          removeNotificationByRequestId(current, requestId)
-        );
+        setNeedsConfirmation((current) => removeNotificationByRequestId(current, requestId));
         return;
       }
 
@@ -149,7 +160,7 @@ export default function Inbox() {
   };
 
   const handleConfirmReject = async () => {
-    if (!token || !rejectRequestId || !rejectReasonCode) return;
+    if (!user || !rejectRequestId || !rejectReasonCode) return;
 
     try {
       setActionId(rejectRequestId);
@@ -157,14 +168,10 @@ export default function Inbox() {
         (item) => item.shiftRequest?.id === rejectRequestId
       );
 
-      const result = await ownerRejectRequest(
-        rejectRequestId,
-        {
-          reasonCode: rejectReasonCode,
-          reopenShift,
-        },
-        token
-      );
+      const result = await ownerRejectRequest(rejectRequestId, {
+        reasonCode: rejectReasonCode,
+        reopenShift,
+      });
 
       setNeedsConfirmation((current) =>
         removeNotificationByRequestId(current, rejectRequestId)
@@ -197,61 +204,87 @@ export default function Inbox() {
   };
 
   const totalItems = useMemo(() => {
-    return (
-      needsConfirmation.length +
-      declinedByYou.length +
-      updates.length
-    );
+    return needsConfirmation.length + declinedByYou.length + updates.length;
   }, [needsConfirmation, declinedByYou, updates]);
+
+  const summaryItems = [
+    { label: "Needs action", value: needsConfirmation.length },
+    { label: "Declined", value: declinedByYou.length },
+    { label: "Updates", value: updates.length },
+  ];
 
   return (
     <div className="page">
-      <h1>Inbox</h1>
+      <section className="hero-card">
+        <div className="section-header">
+          <div>
+            <div className="eyebrow">Inbox Control</div>
+            <h1>Stay on top of approvals without digging through noise.</h1>
+          </div>
+
+          <button className="ghost-btn" type="button" onClick={fetchInboxData} disabled={loading}>
+            {loading ? "Refreshing..." : "Refresh"}
+          </button>
+        </div>
+
+        <div className="metric-row">
+          {summaryItems.map((item) => (
+            <div key={item.label} className="metric-card">
+              <span className="metric-label">{item.label}</span>
+              <strong>{loading ? "..." : item.value}</strong>
+            </div>
+          ))}
+        </div>
+      </section>
 
       {!loading && totalItems === 0 && (
-        <div className="card">
-          <div className="muted">Your inbox is empty.</div>
+        <div className="empty-state">
+          <div className="empty-title">Your inbox is clear.</div>
+          <div className="muted">New approvals and outcomes will appear here.</div>
         </div>
       )}
 
-      <div className="card">
-        <h2 className="section-title">Needs your confirmation</h2>
-
+      <SectionBlock
+        title="Needs your confirmation"
+        count={needsConfirmation.length}
+        description="Approve only after the external CastLife step is complete."
+      >
         {loading ? (
-          <div className="muted">Loading...</div>
+          <div className="list">
+            {[0, 1].map((index) => (
+              <div key={index} className="list-card skeleton-card" aria-hidden="true" />
+            ))}
+          </div>
         ) : needsConfirmation.length === 0 ? (
           <div className="muted">No pending confirmations.</div>
         ) : (
           <div className="list">
-            {needsConfirmation.map((n) => {
-              const requestId = n.shiftRequest?.id;
-              const actorName = n.actorUser?.firstName || "A cast member";
-              const actorPerner = n.actorUser?.pernerNumber || "N/A";
+            {needsConfirmation.map((notification) => {
+              const requestId = notification.shiftRequest?.id;
+              const actorName = notification.actorUser?.firstName || "A cast member";
+              const actorPerner = notification.actorUser?.pernerNumber || "N/A";
 
               return (
-                <div key={n.id} className="list-card">
-                  <div className="list-title">{actorName} wants your shift</div>
-
-                  <div className="list-sub">
-                    PERNER: <b>{actorPerner}</b>
+                <div key={notification.id} className="list-card">
+                  <div className="list-row">
+                    <div className="list-title">{actorName} wants your shift</div>
+                    <div className="count-pill">PERNER {actorPerner}</div>
                   </div>
 
-                  <div className="list-sub">{requestSummary(n)}</div>
-
+                  <div className="list-sub">{requestSummary(notification)}</div>
                   <div className="divider" />
-
-                  <div className="list-sub">
-                    Please confirm after you complete the process in CastLife.
+                  <div className="muted">
+                    Confirm only after the trade is completed in CastLife.
                   </div>
 
-                  <div className="row" style={{ gap: 10 }}>
+                  <div className="action-row">
                     <button
                       className="btn small confirm"
                       type="button"
                       disabled={!requestId || actionId === requestId}
                       onClick={() => handleOwnerAccept(requestId)}
                     >
-                      {actionId === requestId ? "Processing..." : "Accept"}
+                      {actionId === requestId ? "Processing..." : "Approve"}
                     </button>
 
                     <button
@@ -268,61 +301,63 @@ export default function Inbox() {
             })}
           </div>
         )}
-      </div>
+      </SectionBlock>
 
-      <div className="card" style={{ marginTop: 14 }}>
-        <h2 className="section-title">Declined by you</h2>
-
+      <SectionBlock
+        title="Declined by you"
+        count={declinedByYou.length}
+        description="A short record of requests you already turned down."
+      >
         {loading ? (
-          <div className="muted">Loading...</div>
+          <div className="list">
+            <div className="list-card skeleton-card" aria-hidden="true" />
+          </div>
         ) : declinedByYou.length === 0 ? (
           <div className="muted">No declined requests.</div>
         ) : (
           <div className="list">
-            {declinedByYou.map((n) => (
-              <div key={n.id} className="list-card">
+            {declinedByYou.map((notification) => (
+              <div key={notification.id} className="list-card">
                 <div className="list-title">
-                  {n.actorUser?.firstName || "A cast member"}
+                  {notification.actorUser?.firstName || "A cast member"}
                 </div>
-
-                <div className="list-sub">{requestSummary(n)}</div>
-
+                <div className="list-sub">{requestSummary(notification)}</div>
                 <div className="divider" />
-
-                <div className="list-sub">
-                  {formatRejectReason(n.reasonCode) || "You declined this request."}
+                <div className="muted">
+                  {formatRejectReason(notification.reasonCode) || "You declined this request."}
                 </div>
               </div>
             ))}
           </div>
         )}
-      </div>
+      </SectionBlock>
 
-      <div className="card" style={{ marginTop: 14 }}>
-        <h2 className="section-title">Updates</h2>
-
+      <SectionBlock
+        title="Updates"
+        count={updates.length}
+        description="Accepted or rejected outcomes from your published requests."
+      >
         {loading ? (
-          <div className="muted">Loading...</div>
+          <div className="list">
+            <div className="list-card skeleton-card" aria-hidden="true" />
+          </div>
         ) : updates.length === 0 ? (
           <div className="muted">No updates yet.</div>
         ) : (
           <div className="list">
-            {updates.map((n) => (
-              <div key={n.id} className="list-card">
+            {updates.map((notification) => (
+              <div key={notification.id} className="list-card">
                 <div className="list-title">
-                  {n.shiftRequest?.location?.name || "Shift update"}
+                  {notification.shiftRequest?.location?.name || "Shift update"}
                 </div>
-
-                <div className="list-sub">{requestSummary(n)}</div>
-
+                <div className="list-sub">{requestSummary(notification)}</div>
                 <div className="divider" />
-
-                <div className="list-sub">{formatUpdateMessage(n)}</div>
+                <div className="muted">{formatUpdateMessage(notification)}</div>
               </div>
             ))}
           </div>
         )}
-      </div>
+      </SectionBlock>
 
       {rejectSheetOpen && (
         <div className="sheet-overlay" onClick={closeRejectSheet}>
@@ -330,13 +365,13 @@ export default function Inbox() {
             <div className="sheet-handle" />
 
             <div className="sheet-header">
-              <h2>Select an option</h2>
-              <button
-                className="sheet-close"
-                type="button"
-                onClick={closeRejectSheet}
-              >
-                ✕
+              <div>
+                <h2>Reject request</h2>
+                <div className="sheet-lead">Choose a reason and decide if the shift should reopen.</div>
+              </div>
+
+              <button className="sheet-close" type="button" onClick={closeRejectSheet}>
+                X
               </button>
             </div>
 
@@ -352,9 +387,7 @@ export default function Inbox() {
               <option value="OTHER">Other</option>
             </select>
 
-            <div className="label" style={{ marginTop: 12 }}>
-              Reopen this shift?
-            </div>
+            <div className="label">Reopen this shift?</div>
             <select
               className="input"
               value={reopenShift ? "YES" : "NO"}
@@ -364,7 +397,7 @@ export default function Inbox() {
               <option value="NO">No</option>
             </select>
 
-            <div className="row" style={{ gap: 10, marginTop: 16 }}>
+            <div className="action-row">
               <button
                 className="btn small danger"
                 type="button"

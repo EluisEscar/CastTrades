@@ -1,3 +1,4 @@
+/* eslint-disable react-refresh/only-export-components */
 import { createContext, useContext, useEffect, useMemo, useState } from "react";
 import * as authApi from "../api/auth";
 
@@ -5,45 +6,65 @@ const AuthContext = createContext(null);
 export const useAuth = () => useContext(AuthContext);
 
 export function AuthProvider({ children }) {
-  const [user, setUser] = useState(() => {
-    const raw = localStorage.getItem("auth_user");
-    return raw ? JSON.parse(raw) : null;
-  });
-
-  const [token, setToken] = useState(() => {
-    return localStorage.getItem("auth_token");
-  });
+  const [user, setUser] = useState(null);
+  const [isAuthLoading, setIsAuthLoading] = useState(true);
 
   useEffect(() => {
-    if (user) localStorage.setItem("auth_user", JSON.stringify(user));
-    else localStorage.removeItem("auth_user");
-  }, [user]);
+    let cancelled = false;
 
-  useEffect(() => {
-    if (token) localStorage.setItem("auth_token", token);
-    else localStorage.removeItem("auth_token");
-  }, [token]);
+    const restoreSession = async () => {
+      try {
+        const { user: nextUser } = await authApi.getCurrentUser();
+        if (!cancelled) {
+          setUser(nextUser);
+        }
+      } catch {
+        if (!cancelled) {
+          setUser(null);
+        }
+      } finally {
+        if (!cancelled) {
+          setIsAuthLoading(false);
+        }
+      }
+    };
+
+    restoreSession();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const login = async (email, password) => {
-    const { user, token } = await authApi.login(email, password);
+    const { user } = await authApi.login(email, password);
     setUser(user);
-    setToken(token);
   };
 
   const register = async (payload) => {
-    const { user, token } = await authApi.register(payload);
+    const { user } = await authApi.register(payload);
     setUser(user);
-    setToken(token);
   };
 
-  const logout = () => {
+  const logout = async () => {
+    try {
+      await authApi.logout();
+    } catch {
+      // Clear client state even if the request fails.
+    }
+
     setUser(null);
-    setToken(null);
+  };
+
+  const updateProfile = async (payload) => {
+    const { user } = await authApi.updateCurrentUser(payload);
+    setUser(user);
+    return user;
   };
 
   const value = useMemo(
-    () => ({ user, token, login, register, logout }),
-    [user, token]
+    () => ({ user, isAuthLoading, login, register, logout, updateProfile }),
+    [user, isAuthLoading]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
