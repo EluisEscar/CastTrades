@@ -214,9 +214,33 @@ function timeToMinutes(time) {
   return hours * 60 + minutes;
 }
 
-function buildStartDateTime(date, time) {
-  const d = new Date(`${date}T${time}:00`);
-  return Number.isNaN(d.getTime()) ? null : d;
+function normalizeTimezoneOffsetMinutes(value) {
+  const numericValue = Number(value);
+
+  if (!Number.isInteger(numericValue) || numericValue < -840 || numericValue > 840) {
+    throw new ValidationError("timezoneOffsetMinutes is invalid");
+  }
+
+  return numericValue;
+}
+
+function buildStartDateTime(date, time, timezoneOffsetMinutes) {
+  const normalizedOffsetMinutes = normalizeTimezoneOffsetMinutes(timezoneOffsetMinutes);
+  const [year, month, day] = date.split("-").map(Number);
+  const [hours, minutes] = time.split(":").map(Number);
+
+  if (
+    [year, month, day, hours, minutes].some((value) => !Number.isInteger(value))
+  ) {
+    return null;
+  }
+
+  const utcTimestamp =
+    Date.UTC(year, month - 1, day, hours, minutes, 0, 0) +
+    normalizedOffsetMinutes * 60 * 1000;
+  const dateObj = new Date(utcTimestamp);
+
+  return Number.isNaN(dateObj.getTime()) ? null : dateObj;
 }
 
 function isPastOrStarted(dateObj) {
@@ -269,7 +293,7 @@ function parseSelfUpdatePayload(body) {
 }
 
 function parseShiftPayload(body) {
-  assertAllowedKeys(body, ["role", "date", "start", "end", "locationId"]);
+  assertAllowedKeys(body, ["role", "date", "start", "end", "locationId", "timezoneOffsetMinutes"]);
 
   return {
     role: normalizeRole(body.role),
@@ -277,6 +301,7 @@ function parseShiftPayload(body) {
     start: normalizeTimeString(body.start, "start"),
     end: normalizeTimeString(body.end, "end"),
     locationId: normalizeIdentifier(body.locationId, "locationId", 120),
+    timezoneOffsetMinutes: normalizeTimezoneOffsetMinutes(body.timezoneOffsetMinutes),
   };
 }
 
@@ -844,7 +869,9 @@ app.post("/auth/logout", (_req, res) => {
 // CREATE REQUEST
 app.post("/requests", requireAuth, requireJsonBody, async (req, res) => {
   try {
-    const { role, date, start, end, locationId } = parseShiftPayload(req.body);
+    const { role, date, start, end, locationId, timezoneOffsetMinutes } = parseShiftPayload(
+      req.body
+    );
 
     const startMinutes = timeToMinutes(start);
     const endMinutes = timeToMinutes(end);
@@ -859,7 +886,7 @@ app.post("/requests", requireAuth, requireJsonBody, async (req, res) => {
       });
     }
 
-    const startsAt = buildStartDateTime(date, start);
+    const startsAt = buildStartDateTime(date, start, timezoneOffsetMinutes);
 
     if (!startsAt) {
       return res.status(400).json({ error: "Invalid start date/time" });
@@ -980,7 +1007,9 @@ app.get("/requests", requireAuth, async (req, res) => {
 app.patch("/requests/:id", requireAuth, requireJsonBody, async (req, res) => {
   try {
     const id = parseRequestId(req.params);
-    const { role, date, start, end, locationId } = parseShiftPayload(req.body);
+    const { role, date, start, end, locationId, timezoneOffsetMinutes } = parseShiftPayload(
+      req.body
+    );
 
     const existing = await prisma.shiftRequest.findUnique({
       where: { id },
@@ -1007,7 +1036,7 @@ app.patch("/requests/:id", requireAuth, requireJsonBody, async (req, res) => {
       });
     }
 
-    const startsAt = buildStartDateTime(date, start);
+    const startsAt = buildStartDateTime(date, start, timezoneOffsetMinutes);
 
     if (!startsAt) {
       return res.status(400).json({ error: "Invalid start date/time" });

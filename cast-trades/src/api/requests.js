@@ -1,5 +1,12 @@
 import { apiFetch, parseResponse } from "./http.js";
 
+function buildShiftPayload(payload) {
+  return {
+    ...payload,
+    timezoneOffsetMinutes: new Date().getTimezoneOffset(),
+  };
+}
+
 export async function getRequests({ parkId, area, date }) {
   const params = new URLSearchParams();
 
@@ -18,7 +25,7 @@ export async function createRequest(payload) {
     headers: {
       "Content-Type": "application/json",
     },
-    body: JSON.stringify(payload),
+    body: JSON.stringify(buildShiftPayload(payload)),
   });
 
   return parseResponse(r, "Failed to create request");
@@ -30,7 +37,7 @@ export async function updateRequest(id, payload) {
     headers: {
       "Content-Type": "application/json",
     },
-    body: JSON.stringify(payload),
+    body: JSON.stringify(buildShiftPayload(payload)),
   });
 
   return parseResponse(r, "Failed to update request");
