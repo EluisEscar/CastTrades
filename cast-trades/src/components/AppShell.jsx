@@ -77,7 +77,9 @@ export default function AppShell() {
 
       <header className="topbar">
         <div className="brand-cluster">
-          <div className="brand-mark">CT</div>
+          <div className="brand-mark">
+            <img src="/cast-trades-mark.svg" alt="Cast Trades" />
+          </div>
 
           <div>
             <div className="eyebrow">Cast Trades</div>

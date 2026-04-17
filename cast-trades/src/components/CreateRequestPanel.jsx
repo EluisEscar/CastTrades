@@ -49,7 +49,7 @@ export default function CreateRequestPanel({
             </div>
           </div>
 
-          <button className="sheet-close" type="button" onClick={onClosePanel}>
+          <button className="sheet-close sheet-close-danger" type="button" onClick={onClosePanel}>
             X
           </button>
         </div>
@@ -58,11 +58,6 @@ export default function CreateRequestPanel({
           <div className="metric-card">
             <span className="metric-label">Location</span>
             <strong>{selectedLocation.name}</strong>
-          </div>
-
-          <div className="metric-card">
-            <span className="metric-label">Mode</span>
-            <strong>{isEditing ? "Editing" : "New request"}</strong>
           </div>
         </div>
 
@@ -110,10 +105,6 @@ export default function CreateRequestPanel({
           <div className="action-row">
             <button className="btn publish" type="submit">
               {isEditing ? "Save changes" : "Publish request"}
-            </button>
-
-            <button className="btn" type="button" onClick={onClosePanel}>
-              Close
             </button>
           </div>
         </form>

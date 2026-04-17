@@ -31,18 +31,6 @@ export default function CalendarPanel({
           </button>
         </div>
 
-        <div className="metric-row">
-          <div className="metric-card">
-            <span className="metric-label">Visible requests</span>
-            <strong>{loading ? "..." : requestsForDay.length}</strong>
-          </div>
-
-          <div className="metric-card">
-            <span className="metric-label">Mode</span>
-            <strong>{user?.firstName ? `${user.firstName}'s board` : "Board"}</strong>
-          </div>
-        </div>
-
         <DateSheet
           label="Select day"
           title="Select date"
