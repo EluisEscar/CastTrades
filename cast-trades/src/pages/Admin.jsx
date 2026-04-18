@@ -427,7 +427,7 @@ export default function Admin() {
             <h1>Control users, catalog, requests and audit activity from one board.</h1>
           </div>
 
-          <button className="ghost-btn" type="button" onClick={refreshAll} disabled={loading}>
+          <button className="btn primary" type="button" onClick={refreshAll} disabled={loading}>
             {loading ? "Refreshing..." : "Refresh"}
           </button>
         </div>

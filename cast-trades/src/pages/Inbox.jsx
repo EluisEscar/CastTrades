@@ -222,7 +222,7 @@ export default function Inbox() {
             <h1>Stay on top of approvals without digging through noise.</h1>
           </div>
 
-          <button className="ghost-btn" type="button" onClick={fetchInboxData} disabled={loading}>
+          <button className="btn primary" type="button" onClick={fetchInboxData} disabled={loading}>
             {loading ? "Refreshing..." : "Refresh"}
           </button>
         </div>
