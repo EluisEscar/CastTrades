@@ -52,6 +52,84 @@ function buildGreeting(user) {
   return `${firstName}${lastInitial}`;
 }
 
+function ShellSkeletonTab({ wide = false }) {
+  return (
+    <div className="tab shell-skeleton-tab" aria-hidden="true">
+      <div className="shell-skeleton-tab-icon skeleton-card" />
+      <div className={`shell-skeleton-line skeleton-card ${wide ? "wide" : "short"}`} />
+    </div>
+  );
+}
+
+export function AppShellSkeleton() {
+  return (
+    <div className="app app-loading-shell">
+      <div className="app-shell-glow" aria-hidden="true" />
+
+      <header className="topbar">
+        <div className="brand-cluster" aria-hidden="true">
+          <div className="brand-mark skeleton-card" />
+
+          <div className="shell-skeleton-stack">
+            <div className="shell-skeleton-line skeleton-card short" />
+            <div className="shell-skeleton-line skeleton-card medium" />
+          </div>
+        </div>
+
+        <div className="topbar-right" aria-hidden="true">
+          <div className="shell-skeleton-chip skeleton-card" />
+          <div className="shell-skeleton-button skeleton-card" />
+        </div>
+      </header>
+
+      <main className="content">
+        <div className="page">
+          <section className="hero-card">
+            <div className="section-header" aria-hidden="true">
+              <div className="shell-skeleton-stack shell-skeleton-grow">
+                <div className="shell-skeleton-line skeleton-card short" />
+                <div className="shell-skeleton-line skeleton-card hero" />
+              </div>
+
+              <div className="shell-skeleton-button skeleton-card" />
+            </div>
+
+            <div className="metric-row" aria-hidden="true">
+              {[0, 1, 2].map((index) => (
+                <div key={index} className="metric-card skeleton-card shell-skeleton-metric" />
+              ))}
+            </div>
+          </section>
+
+          {[0, 1].map((index) => (
+            <section key={index} className="card stack-section">
+              <div className="section-header" aria-hidden="true">
+                <div className="shell-skeleton-stack shell-skeleton-grow">
+                  <div className="shell-skeleton-line skeleton-card medium" />
+                  <div className="shell-skeleton-line skeleton-card section-copy" />
+                </div>
+
+                <div className="shell-skeleton-count skeleton-card" />
+              </div>
+
+              <div className="list" aria-hidden="true">
+                <div className="list-card skeleton-card shell-skeleton-list-card" />
+                <div className="list-card skeleton-card shell-skeleton-list-card compact" />
+              </div>
+            </section>
+          ))}
+        </div>
+      </main>
+
+      <nav className="tabbar" aria-hidden="true">
+        <ShellSkeletonTab />
+        <ShellSkeletonTab />
+        <ShellSkeletonTab wide />
+      </nav>
+    </div>
+  );
+}
+
 export default function AppShell() {
   const { user, logout } = useAuth();
   const [isLoggingOut, setIsLoggingOut] = useState(false);

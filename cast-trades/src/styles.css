@@ -876,6 +876,93 @@ a {
   margin-top: 0;
 }
 
+.shell-skeleton-stack {
+  display: grid;
+  gap: 10px;
+}
+
+.shell-skeleton-grow {
+  flex: 1;
+  min-width: 0;
+}
+
+.shell-skeleton-line,
+.shell-skeleton-chip,
+.shell-skeleton-button,
+.shell-skeleton-count,
+.shell-skeleton-tab-icon {
+  min-height: 0;
+}
+
+.shell-skeleton-line.short {
+  width: 88px;
+  height: 12px;
+}
+
+.shell-skeleton-line.medium {
+  width: 148px;
+  height: 18px;
+}
+
+.shell-skeleton-line.wide {
+  width: 72px;
+  height: 12px;
+}
+
+.shell-skeleton-line.hero {
+  width: min(520px, 100%);
+  height: 44px;
+}
+
+.shell-skeleton-line.section-copy {
+  width: min(360px, 100%);
+  height: 14px;
+}
+
+.shell-skeleton-chip {
+  width: 116px;
+  height: 36px;
+  border-radius: 999px;
+}
+
+.shell-skeleton-button {
+  width: 118px;
+  height: 44px;
+  border-radius: 14px;
+}
+
+.shell-skeleton-count {
+  width: 48px;
+  height: 36px;
+  border-radius: 999px;
+}
+
+.shell-skeleton-metric {
+  min-height: 84px;
+}
+
+.shell-skeleton-list-card {
+  min-height: 126px;
+}
+
+.shell-skeleton-list-card.compact {
+  min-height: 96px;
+}
+
+.shell-skeleton-tab {
+  pointer-events: none;
+}
+
+.shell-skeleton-tab-icon {
+  width: 22px;
+  height: 22px;
+  border-radius: 999px;
+}
+
+.app-loading-shell .brand-mark.skeleton-card {
+  min-height: 0;
+}
+
 .skeleton-card {
   position: relative;
   min-height: 110px;
@@ -894,6 +981,10 @@ a {
     transparent
   );
   animation: shimmer 1.3s linear infinite;
+}
+
+.shell-skeleton-tab .shell-skeleton-line {
+  margin-top: 8px;
 }
 
 @keyframes slideUpSheet {

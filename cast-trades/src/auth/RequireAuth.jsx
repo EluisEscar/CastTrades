@@ -1,12 +1,13 @@
 import { Navigate, useLocation } from "react-router-dom";
 import { useAuth } from "./AuthContext.jsx";
+import { AppShellSkeleton } from "../components/AppShell.jsx";
 
 export default function RequireAuth({ children }) {
   const { user, isAuthLoading } = useAuth();
   const location = useLocation();
 
   if (isAuthLoading) {
-    return <div className="page">Loading session...</div>;
+    return <AppShellSkeleton />;
   }
 
   if (!user) {

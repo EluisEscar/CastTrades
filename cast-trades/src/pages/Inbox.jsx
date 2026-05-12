@@ -99,12 +99,12 @@ export default function Inbox() {
   const [rejectReasonCode, setRejectReasonCode] = useState("");
   const [reopenShift, setReopenShift] = useState(true);
 
-  const fetchInboxData = useCallback(async () => {
+  const fetchInboxData = useCallback(async ({ force = false } = {}) => {
     if (!user) return;
 
     try {
       setLoading(true);
-      const data = await getInbox();
+      const data = await getInbox({ force });
 
       setNeedsConfirmation((data?.needsConfirmation || []).filter(isValidNotificationItem));
       setDeclinedByYou((data?.declinedByYou || []).filter(isValidNotificationItem));
@@ -222,7 +222,12 @@ export default function Inbox() {
             <h1>Stay on top of approvals without digging through noise.</h1>
           </div>
 
-          <button className="btn primary" type="button" onClick={fetchInboxData} disabled={loading}>
+          <button
+            className="btn primary"
+            type="button"
+            onClick={() => fetchInboxData({ force: true })}
+            disabled={loading}
+          >
             {loading ? "Refreshing..." : "Refresh"}
           </button>
         </div>

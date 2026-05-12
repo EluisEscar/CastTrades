@@ -1,14 +1,21 @@
 import { apiFetch, parseResponse } from "./http.js";
 
 let inboxPromise = null;
+let inboxCache = null;
+let inboxGeneration = 0;
 
-export async function getInbox() {
-  if (inboxPromise) {
-    return inboxPromise;
-  }
+function requestInbox() {
+  const requestGeneration = inboxGeneration;
 
   inboxPromise = apiFetch("/inbox")
     .then((r) => parseResponse(r, "Failed to fetch inbox"))
+    .then((data) => {
+      if (requestGeneration === inboxGeneration) {
+        inboxCache = data;
+      }
+
+      return data;
+    })
     .finally(() => {
       inboxPromise = null;
     });
@@ -16,7 +23,44 @@ export async function getInbox() {
   return inboxPromise;
 }
 
+export async function getInbox(options = {}) {
+  const { force = false } = options;
+
+  if (force) {
+    inboxCache = null;
+  }
+
+  if (!force && inboxCache) {
+    return inboxCache;
+  }
+
+  if (inboxPromise) {
+    return inboxPromise;
+  }
+
+  return requestInbox();
+}
+
+export function prefetchInbox() {
+  if (inboxCache) {
+    return Promise.resolve(inboxCache);
+  }
+
+  if (inboxPromise) {
+    return inboxPromise;
+  }
+
+  return requestInbox();
+}
+
+export function clearInboxCache() {
+  inboxGeneration += 1;
+  inboxCache = null;
+  inboxPromise = null;
+}
+
 export async function ownerAcceptRequest(id) {
+  clearInboxCache();
   const r = await apiFetch(`/requests/${id}/owner-accept`, {
     method: "POST",
   });
@@ -25,6 +69,7 @@ export async function ownerAcceptRequest(id) {
 }
 
 export async function ownerRejectRequest(id, payload) {
+  clearInboxCache();
   const r = await apiFetch(`/requests/${id}/owner-reject`, {
     method: "POST",
     headers: {
