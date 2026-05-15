@@ -4,6 +4,7 @@ import {
   getInbox,
   ownerAcceptRequest,
   ownerRejectRequest,
+  subscribeToInbox,
 } from "../api/inbox.js";
 
 const DECLINED_BY_YOU_LIMIT = 20;
@@ -122,6 +123,18 @@ export default function Inbox() {
   useEffect(() => {
     fetchInboxData();
   }, [fetchInboxData]);
+
+  useEffect(() => {
+    if (!user) return undefined;
+
+    const unsubscribe = subscribeToInbox((data) => {
+      setNeedsConfirmation((data?.needsConfirmation || []).filter(isValidNotificationItem));
+      setDeclinedByYou((data?.declinedByYou || []).filter(isValidNotificationItem));
+      setUpdates((data?.updates || []).filter(isValidNotificationItem));
+    });
+
+    return unsubscribe;
+  }, [user]);
 
   const handleOwnerAccept = async (requestId) => {
     if (!user || !requestId) return;

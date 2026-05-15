@@ -1,7 +1,12 @@
 /* eslint-disable react-refresh/only-export-components */
 import { createContext, useContext, useEffect, useMemo, useState } from "react";
 import * as authApi from "../api/auth";
-import { clearInboxCache, prefetchInbox } from "../api/inbox";
+import {
+  clearInboxCache,
+  prefetchInbox,
+  startInboxStream,
+  stopInboxStream,
+} from "../api/inbox";
 
 const AuthContext = createContext(null);
 export const useAuth = () => useContext(AuthContext);
@@ -21,9 +26,11 @@ export function AuthProvider({ children }) {
         }
         if (nextUser) {
           prefetchInbox().catch(() => {});
+          startInboxStream();
         }
       } catch {
         clearInboxCache();
+        stopInboxStream();
         if (!cancelled) {
           setUser(null);
         }
@@ -45,15 +52,18 @@ export function AuthProvider({ children }) {
     const { user } = await authApi.login(email, password);
     setUser(user);
     prefetchInbox().catch(() => {});
+    startInboxStream();
   };
 
   const register = async (payload) => {
     const { user } = await authApi.register(payload);
     setUser(user);
     prefetchInbox().catch(() => {});
+    startInboxStream();
   };
 
   const logout = async () => {
+    stopInboxStream();
     clearInboxCache();
 
     try {

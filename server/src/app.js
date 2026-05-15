@@ -209,6 +209,41 @@ function requireAdmin(req, res, next) {
   return next();
 }
 
+const sseClients = new Map();
+const SSE_HEARTBEAT_MS = 25_000;
+
+function addSseClient(userId, res) {
+  let set = sseClients.get(userId);
+  if (!set) {
+    set = new Set();
+    sseClients.set(userId, set);
+  }
+  set.add(res);
+}
+
+function removeSseClient(userId, res) {
+  const set = sseClients.get(userId);
+  if (!set) return;
+  set.delete(res);
+  if (set.size === 0) {
+    sseClients.delete(userId);
+  }
+}
+
+function publishInboxEvent(userId, payload) {
+  const set = sseClients.get(userId);
+  if (!set || set.size === 0) return;
+
+  const data = `event: inbox-changed\ndata: ${JSON.stringify(payload || {})}\n\n`;
+  for (const res of set) {
+    try {
+      res.write(data);
+    } catch {
+      // best effort; cleanup happens on the 'close' handler
+    }
+  }
+}
+
 function timeToMinutes(time) {
   if (!time || !time.includes(":")) return null;
 
@@ -1227,6 +1262,11 @@ app.post("/requests/:id/accept", requireAuth, async (req, res) => {
       });
     }
 
+    publishInboxEvent(existing.ownerId, {
+      type: "NEEDS_CONFIRMATION",
+      shiftRequestId: id,
+    });
+
     return res.json(result);
   } catch (err) {
     return respondWithRouteError(res, "ACCEPT REQUEST ERROR:", err);
@@ -1334,6 +1374,11 @@ app.post("/requests/:id/owner-accept", requireAuth, async (req, res) => {
         error: "This request was already updated or has already started.",
       });
     }
+
+    publishInboxEvent(existing.acceptedByUserId, {
+      type: "REQUEST_ACCEPTED",
+      shiftRequestId: id,
+    });
 
     return res.json(result);
   } catch (err) {
@@ -1451,6 +1496,15 @@ app.post("/requests/:id/owner-reject", requireAuth, requireJsonBody, async (req,
         error: "This request was already updated or has already started.",
       });
     }
+
+    publishInboxEvent(pendingUserId, {
+      type: "REQUEST_REJECTED",
+      shiftRequestId: id,
+    });
+    publishInboxEvent(ownerId, {
+      type: "DECLINED_BY_YOU",
+      shiftRequestId: id,
+    });
 
     return res.json(result);
   } catch (err) {
@@ -1614,6 +1668,36 @@ app.get("/locations", requireAuth, async (req, res) => {
   } catch (err) {
     return respondWithRouteError(res, "GET LOCATIONS ERROR:", err);
   }
+});
+
+app.get("/events", requireAuth, (req, res) => {
+  res.set({
+    "Content-Type": "text/event-stream",
+    "Cache-Control": "no-cache, no-transform",
+    Connection: "keep-alive",
+    "X-Accel-Buffering": "no",
+  });
+  res.flushHeaders?.();
+  res.write(": connected\n\n");
+
+  const userId = req.user.id;
+  addSseClient(userId, res);
+
+  const heartbeat = setInterval(() => {
+    try {
+      res.write(": ping\n\n");
+    } catch {
+      // ignore
+    }
+  }, SSE_HEARTBEAT_MS);
+
+  const cleanup = () => {
+    clearInterval(heartbeat);
+    removeSseClient(userId, res);
+  };
+
+  req.on("close", cleanup);
+  req.on("error", cleanup);
 });
 
 app.get("/inbox", requireAuth, async (req, res) => {
