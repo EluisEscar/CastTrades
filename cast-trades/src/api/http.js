@@ -2,7 +2,7 @@ const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || "")
   .trim()
   .replace(/\/+$/, "");
 
-function resolveApiUrl(url) {
+export function resolveApiUrl(url) {
   if (/^https?:\/\//i.test(url)) {
     return url;
   }

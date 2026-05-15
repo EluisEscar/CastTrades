@@ -200,8 +200,15 @@ export function normalizeDateString(value, field = "date") {
     pattern: /^\d{4}-\d{2}-\d{2}$/,
   });
 
-  const parsed = new Date(`${normalizedValue}T00:00:00Z`);
-  if (Number.isNaN(parsed.getTime())) {
+  const [year, month, day] = normalizedValue.split("-").map(Number);
+  const parsed = new Date(Date.UTC(year, month - 1, day));
+
+  if (
+    Number.isNaN(parsed.getTime()) ||
+    parsed.getUTCFullYear() !== year ||
+    parsed.getUTCMonth() !== month - 1 ||
+    parsed.getUTCDate() !== day
+  ) {
     throw new ValidationError(`${field} is invalid`);
   }
 
