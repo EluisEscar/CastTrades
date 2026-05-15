@@ -1,10 +1,24 @@
 import { apiFetch, parseResponse } from "./http.js";
 
+function resolveTimeZone() {
+  try {
+    return Intl.DateTimeFormat().resolvedOptions().timeZone || undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 function buildShiftPayload(payload) {
-  return {
-    ...payload,
-    timezoneOffsetMinutes: new Date().getTimezoneOffset(),
-  };
+  const timeZone = resolveTimeZone();
+  const next = { ...payload };
+
+  if (timeZone) {
+    next.timeZone = timeZone;
+  } else {
+    next.timezoneOffsetMinutes = new Date().getTimezoneOffset();
+  }
+
+  return next;
 }
 
 export async function getRequests({ parkId, area, date }) {
