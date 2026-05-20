@@ -420,6 +420,7 @@ export default function Locations() {
             </div>
           </div>
         </div>
+
       </section>
 
       <section className="card">
