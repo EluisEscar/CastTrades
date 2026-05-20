@@ -55,7 +55,7 @@ const AUTH_COOKIE_MAX_AGE_SECONDS = 7 * 24 * 60 * 60;
 const AUTH_COOKIE_SECURE = parseBooleanEnv(process.env.AUTH_COOKIE_SECURE);
 const AUTH_COOKIE_SAME_SITE = parseCookieSameSiteEnv(
   process.env.AUTH_COOKIE_SAME_SITE,
-  AUTH_COOKIE_SECURE ? "None" : "Lax"
+  "Lax"
 );
 const GENERAL_RATE_LIMIT_WINDOW_MS = parseDurationEnv(
   process.env.RATE_LIMIT_WINDOW_MS,
@@ -133,6 +133,10 @@ const signToken = (user) => {
   return jwt.sign({ sub: user.id }, process.env.JWT_SECRET, { expiresIn: "7d" });
 };
 
+function isBootstrapAdminEmail(email) {
+  return ADMIN_EMAILS.has(String(email || "").trim().toLowerCase());
+}
+
 function getUserSessionSelect() {
   return {
     id: true,
@@ -146,30 +150,18 @@ function getUserSessionSelect() {
   };
 }
 
-async function bootstrapAdminsOnStartup() {
-  if (ADMIN_EMAILS.size === 0) {
-    return;
+async function maybePromoteBootstrapAdmin(user) {
+  if (!user || !isBootstrapAdminEmail(user.email) || ADMIN_ROLES.includes(user.role)) {
+    return user;
   }
 
-  const existingAdminCount = await prisma.user.count({
-    where: { role: { in: ADMIN_ROLES } },
-  });
-
-  if (existingAdminCount > 0) {
-    return;
-  }
-
-  const result = await prisma.user.updateMany({
-    where: {
-      email: { in: Array.from(ADMIN_EMAILS) },
-      role: "USER",
+  return prisma.user.update({
+    where: { id: user.id },
+    data: {
+      role: "ADMIN",
     },
-    data: { role: "ADMIN" },
+    select: getUserSessionSelect(),
   });
-
-  if (result.count > 0) {
-    console.log(`[bootstrap] promoted ${result.count} bootstrap admin(s)`);
-  }
 }
 
 const requireAuth = async (req, res, next) => {
@@ -181,7 +173,7 @@ const requireAuth = async (req, res, next) => {
     }
 
     const payload = jwt.verify(token, process.env.JWT_SECRET);
-    const user = await prisma.user.findUnique({
+    let user = await prisma.user.findUnique({
       where: { id: payload.sub },
       select: getUserSessionSelect(),
     });
@@ -189,6 +181,8 @@ const requireAuth = async (req, res, next) => {
     if (!user) {
       return res.status(401).json({ error: "Unauthorized" });
     }
+
+    user = await maybePromoteBootstrapAdmin(user);
 
     if (!user.isActive) {
       return res.status(403).json({ error: "Account disabled" });
@@ -207,41 +201,6 @@ function requireAdmin(req, res, next) {
   }
 
   return next();
-}
-
-const sseClients = new Map();
-const SSE_HEARTBEAT_MS = 25_000;
-
-function addSseClient(userId, res) {
-  let set = sseClients.get(userId);
-  if (!set) {
-    set = new Set();
-    sseClients.set(userId, set);
-  }
-  set.add(res);
-}
-
-function removeSseClient(userId, res) {
-  const set = sseClients.get(userId);
-  if (!set) return;
-  set.delete(res);
-  if (set.size === 0) {
-    sseClients.delete(userId);
-  }
-}
-
-function publishInboxEvent(userId, payload) {
-  const set = sseClients.get(userId);
-  if (!set || set.size === 0) return;
-
-  const data = `event: inbox-changed\ndata: ${JSON.stringify(payload || {})}\n\n`;
-  for (const res of set) {
-    try {
-      res.write(data);
-    } catch {
-      // best effort; cleanup happens on the 'close' handler
-    }
-  }
 }
 
 function timeToMinutes(time) {
@@ -264,50 +223,8 @@ function normalizeTimezoneOffsetMinutes(value) {
   return numericValue;
 }
 
-function normalizeOptionalTimeZone(value) {
-  if (value === undefined || value === null || value === "") {
-    return undefined;
-  }
-
-  if (typeof value !== "string" || value.length > 64) {
-    throw new ValidationError("timeZone is invalid");
-  }
-
-  try {
-    new Intl.DateTimeFormat("en-US", { timeZone: value });
-  } catch {
-    throw new ValidationError("timeZone is invalid");
-  }
-
-  return value;
-}
-
-function getTimeZoneOffsetMinutes(timeZone, utcMillis) {
-  const parts = new Intl.DateTimeFormat("en-US", {
-    timeZone,
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-    hour12: false,
-  }).formatToParts(new Date(utcMillis));
-
-  const lookup = Object.fromEntries(parts.map((p) => [p.type, p.value]));
-  const wallMs = Date.UTC(
-    Number(lookup.year),
-    Number(lookup.month) - 1,
-    Number(lookup.day),
-    lookup.hour === "24" ? 0 : Number(lookup.hour),
-    Number(lookup.minute),
-    Number(lookup.second)
-  );
-
-  return Math.round((utcMillis - wallMs) / 60000);
-}
-
-function buildStartDateTime(date, time, timezoneOffsetMinutes, timeZone) {
+function buildStartDateTime(date, time, timezoneOffsetMinutes) {
+  const normalizedOffsetMinutes = normalizeTimezoneOffsetMinutes(timezoneOffsetMinutes);
   const [year, month, day] = date.split("-").map(Number);
   const [hours, minutes] = time.split(":").map(Number);
 
@@ -317,18 +234,10 @@ function buildStartDateTime(date, time, timezoneOffsetMinutes, timeZone) {
     return null;
   }
 
-  const naiveUtc = Date.UTC(year, month - 1, day, hours, minutes, 0, 0);
-
-  if (timeZone) {
-    const guessOffset = getTimeZoneOffsetMinutes(timeZone, naiveUtc);
-    const candidate = naiveUtc + guessOffset * 60 * 1000;
-    const refinedOffset = getTimeZoneOffsetMinutes(timeZone, candidate);
-    const dateObj = new Date(naiveUtc + refinedOffset * 60 * 1000);
-    return Number.isNaN(dateObj.getTime()) ? null : dateObj;
-  }
-
-  const normalizedOffsetMinutes = normalizeTimezoneOffsetMinutes(timezoneOffsetMinutes);
-  const dateObj = new Date(naiveUtc + normalizedOffsetMinutes * 60 * 1000);
+  const utcTimestamp =
+    Date.UTC(year, month - 1, day, hours, minutes, 0, 0) +
+    normalizedOffsetMinutes * 60 * 1000;
+  const dateObj = new Date(utcTimestamp);
 
   return Number.isNaN(dateObj.getTime()) ? null : dateObj;
 }
@@ -383,17 +292,7 @@ function parseSelfUpdatePayload(body) {
 }
 
 function parseShiftPayload(body) {
-  assertAllowedKeys(body, [
-    "role",
-    "date",
-    "start",
-    "end",
-    "locationId",
-    "timezoneOffsetMinutes",
-    "timeZone",
-  ]);
-
-  const timeZone = normalizeOptionalTimeZone(body.timeZone);
+  assertAllowedKeys(body, ["role", "date", "start", "end", "locationId", "timezoneOffsetMinutes"]);
 
   return {
     role: normalizeRole(body.role),
@@ -401,10 +300,7 @@ function parseShiftPayload(body) {
     start: normalizeTimeString(body.start, "start"),
     end: normalizeTimeString(body.end, "end"),
     locationId: normalizeIdentifier(body.locationId, "locationId", 120),
-    timezoneOffsetMinutes: timeZone
-      ? null
-      : normalizeTimezoneOffsetMinutes(body.timezoneOffsetMinutes),
-    timeZone,
+    timezoneOffsetMinutes: normalizeTimezoneOffsetMinutes(body.timezoneOffsetMinutes),
   };
 }
 
@@ -825,7 +721,7 @@ app.post("/auth/register", authRateLimiter, requireJsonBody, async (req, res) =>
         firstName,
         lastName,
         pernerNumber,
-        role: "USER",
+        role: isBootstrapAdminEmail(email) ? "ADMIN" : "USER",
       },
       select: getUserSessionSelect(),
     });
@@ -876,7 +772,7 @@ app.post("/auth/login", authRateLimiter, requireJsonBody, async (req, res) => {
       return res.status(403).json({ error: "Account disabled" });
     }
 
-    const sessionUser = user;
+    const sessionUser = await maybePromoteBootstrapAdmin(user);
     const token = signToken(sessionUser);
     setAuthCookie(res, token, {
       cookieName: AUTH_COOKIE_NAME,
@@ -914,15 +810,9 @@ app.post("/auth/logout", (_req, res) => {
 // CREATE REQUEST
 app.post("/requests", requireAuth, requireJsonBody, async (req, res) => {
   try {
-    const {
-      role,
-      date,
-      start,
-      end,
-      locationId,
-      timezoneOffsetMinutes,
-      timeZone,
-    } = parseShiftPayload(req.body);
+    const { role, date, start, end, locationId, timezoneOffsetMinutes } = parseShiftPayload(
+      req.body
+    );
 
     const startMinutes = timeToMinutes(start);
     const endMinutes = timeToMinutes(end);
@@ -937,7 +827,7 @@ app.post("/requests", requireAuth, requireJsonBody, async (req, res) => {
       });
     }
 
-    const startsAt = buildStartDateTime(date, start, timezoneOffsetMinutes, timeZone);
+    const startsAt = buildStartDateTime(date, start, timezoneOffsetMinutes);
 
     if (!startsAt) {
       return res.status(400).json({ error: "Invalid start date/time" });
@@ -1005,24 +895,16 @@ app.get("/requests", requireAuth, async (req, res) => {
       startsAt: {
         gt: new Date(),
       },
-      location: {
-        isActive: true,
-        park: {
-          isActive: true,
-        },
-      },
     };
 
     if (date) {
       where.date = date;
     }
 
-    if (parkId) {
-      where.location.parkId = parkId;
-    }
-
-    if (area) {
-      where.location.area = area;
+    if (parkId || area) {
+      where.location = {};
+      if (parkId) where.location.parkId = parkId;
+      if (area) where.location.area = area;
     }
 
     const requests = await prisma.shiftRequest.findMany({
@@ -1066,15 +948,9 @@ app.get("/requests", requireAuth, async (req, res) => {
 app.patch("/requests/:id", requireAuth, requireJsonBody, async (req, res) => {
   try {
     const id = parseRequestId(req.params);
-    const {
-      role,
-      date,
-      start,
-      end,
-      locationId,
-      timezoneOffsetMinutes,
-      timeZone,
-    } = parseShiftPayload(req.body);
+    const { role, date, start, end, locationId, timezoneOffsetMinutes } = parseShiftPayload(
+      req.body
+    );
 
     const existing = await prisma.shiftRequest.findUnique({
       where: { id },
@@ -1086,12 +962,6 @@ app.patch("/requests/:id", requireAuth, requireJsonBody, async (req, res) => {
 
     if (existing.ownerId !== req.user.id) {
       return res.status(403).json({ error: "Not allowed" });
-    }
-
-    if (existing.status !== "OPEN") {
-      return res.status(409).json({
-        error: "Only open requests can be edited.",
-      });
     }
 
     const startMinutes = timeToMinutes(start);
@@ -1107,7 +977,7 @@ app.patch("/requests/:id", requireAuth, requireJsonBody, async (req, res) => {
       });
     }
 
-    const startsAt = buildStartDateTime(date, start, timezoneOffsetMinutes, timeZone);
+    const startsAt = buildStartDateTime(date, start, timezoneOffsetMinutes);
 
     if (!startsAt) {
       return res.status(400).json({ error: "Invalid start date/time" });
@@ -1175,12 +1045,6 @@ app.post("/requests/:id/accept", requireAuth, async (req, res) => {
       select: {
         id: true,
         ownerId: true,
-        location: {
-          select: {
-            isActive: true,
-            park: { select: { isActive: true } },
-          },
-        },
       },
     });
 
@@ -1190,12 +1054,6 @@ app.post("/requests/:id/accept", requireAuth, async (req, res) => {
 
     if (existing.ownerId === userId) {
       return res.status(400).json({ error: "You cannot accept your own request" });
-    }
-
-    if (!existing.location?.isActive || !existing.location?.park?.isActive) {
-      return res.status(409).json({
-        error: "This request is no longer available.",
-      });
     }
 
     const result = await prisma.$transaction(async (tx) => {
@@ -1261,11 +1119,6 @@ app.post("/requests/:id/accept", requireAuth, async (req, res) => {
         error: "This request is no longer available.",
       });
     }
-
-    publishInboxEvent(existing.ownerId, {
-      type: "NEEDS_CONFIRMATION",
-      shiftRequestId: id,
-    });
 
     return res.json(result);
   } catch (err) {
@@ -1374,11 +1227,6 @@ app.post("/requests/:id/owner-accept", requireAuth, async (req, res) => {
         error: "This request was already updated or has already started.",
       });
     }
-
-    publishInboxEvent(existing.acceptedByUserId, {
-      type: "REQUEST_ACCEPTED",
-      shiftRequestId: id,
-    });
 
     return res.json(result);
   } catch (err) {
@@ -1497,15 +1345,6 @@ app.post("/requests/:id/owner-reject", requireAuth, requireJsonBody, async (req,
       });
     }
 
-    publishInboxEvent(pendingUserId, {
-      type: "REQUEST_REJECTED",
-      shiftRequestId: id,
-    });
-    publishInboxEvent(ownerId, {
-      type: "DECLINED_BY_YOU",
-      shiftRequestId: id,
-    });
-
     return res.json(result);
   } catch (err) {
     return respondWithRouteError(res, "OWNER REJECT ERROR:", err);
@@ -1527,12 +1366,6 @@ app.delete("/requests/:id", requireAuth, async (req, res) => {
 
     if (existing.ownerId !== req.user.id) {
       return res.status(403).json({ error: "Not allowed" });
-    }
-
-    if (existing.status !== "OPEN") {
-      return res.status(409).json({
-        error: "Only open requests can be deleted.",
-      });
     }
 
     await prisma.shiftRequest.delete({
@@ -1618,6 +1451,8 @@ app.patch("/me", requireAuth, requireJsonBody, async (req, res) => {
         },
         select: getUserSessionSelect(),
       });
+
+      user = await maybePromoteBootstrapAdmin(user);
     }
 
     return res.json({ user });
@@ -1668,36 +1503,6 @@ app.get("/locations", requireAuth, async (req, res) => {
   } catch (err) {
     return respondWithRouteError(res, "GET LOCATIONS ERROR:", err);
   }
-});
-
-app.get("/events", requireAuth, (req, res) => {
-  res.set({
-    "Content-Type": "text/event-stream",
-    "Cache-Control": "no-cache, no-transform",
-    Connection: "keep-alive",
-    "X-Accel-Buffering": "no",
-  });
-  res.flushHeaders?.();
-  res.write(": connected\n\n");
-
-  const userId = req.user.id;
-  addSseClient(userId, res);
-
-  const heartbeat = setInterval(() => {
-    try {
-      res.write(": ping\n\n");
-    } catch {
-      // ignore
-    }
-  }, SSE_HEARTBEAT_MS);
-
-  const cleanup = () => {
-    clearInterval(heartbeat);
-    removeSseClient(userId, res);
-  };
-
-  req.on("close", cleanup);
-  req.on("error", cleanup);
 });
 
 app.get("/inbox", requireAuth, async (req, res) => {
@@ -2414,9 +2219,6 @@ function startCleanupLoop() {
 }
 
 export function startServer() {
-  bootstrapAdminsOnStartup().catch((err) => {
-    console.error("BOOTSTRAP ADMIN ERROR:", err);
-  });
   startCleanupLoop();
   return app.listen(port, () => console.log(`API running on http://localhost:${port}`));
 }
