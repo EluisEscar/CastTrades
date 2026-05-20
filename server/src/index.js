@@ -56,7 +56,7 @@ const AUTH_COOKIE_MAX_AGE_SECONDS = 7 * 24 * 60 * 60;
 const AUTH_COOKIE_SECURE = parseBooleanEnv(process.env.AUTH_COOKIE_SECURE);
 const AUTH_COOKIE_SAME_SITE = parseCookieSameSiteEnv(
   process.env.AUTH_COOKIE_SAME_SITE,
-  "Lax"
+  AUTH_COOKIE_SECURE ? "None" : "Lax"
 );
 const GENERAL_RATE_LIMIT_WINDOW_MS = parseDurationEnv(
   process.env.RATE_LIMIT_WINDOW_MS,
