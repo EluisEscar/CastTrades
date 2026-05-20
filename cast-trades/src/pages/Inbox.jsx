@@ -3,8 +3,7 @@ import { useAuth } from "../auth/AuthContext.jsx";
 import {
   getInbox,
   ownerAcceptRequest,
-  ownerRejectRequest,
-  subscribeToInbox,
+  ownerRejectRequest
 } from "../api/inbox.js";
 
 const DECLINED_BY_YOU_LIMIT = 20;
