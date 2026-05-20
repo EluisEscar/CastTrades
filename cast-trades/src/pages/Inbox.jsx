@@ -123,18 +123,6 @@ export default function Inbox() {
     fetchInboxData();
   }, [fetchInboxData]);
 
-  useEffect(() => {
-    if (!user) return undefined;
-
-    const unsubscribe = subscribeToInbox((data) => {
-      setNeedsConfirmation((data?.needsConfirmation || []).filter(isValidNotificationItem));
-      setDeclinedByYou((data?.declinedByYou || []).filter(isValidNotificationItem));
-      setUpdates((data?.updates || []).filter(isValidNotificationItem));
-    });
-
-    return unsubscribe;
-  }, [user]);
-
   const handleOwnerAccept = async (requestId) => {
     if (!user || !requestId) return;
 
