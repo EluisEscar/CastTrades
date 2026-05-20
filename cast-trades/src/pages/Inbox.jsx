@@ -104,7 +104,7 @@ export default function Inbox() {
 
     try {
       setLoading(true);
-      const data = await getInbox();
+      const data = await getInbox({ force: true });
 
       setNeedsConfirmation((data?.needsConfirmation || []).filter(isValidNotificationItem));
       setDeclinedByYou((data?.declinedByYou || []).filter(isValidNotificationItem));
