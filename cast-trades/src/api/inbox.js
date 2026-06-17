@@ -1,4 +1,4 @@
-import { apiFetch, parseResponse, resolveApiUrl } from "./http.js";
+import { apiFetch, parseResponse } from "./http.js";
 
 let inboxPromise = null;
 let inboxCache = null;

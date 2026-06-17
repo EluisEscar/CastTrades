@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext.jsx";
 import AuthFrame from "../components/AuthFrame.jsx";
+import PasswordInput from "../components/PasswordInput.jsx";
 
 export default function Login() {
   const [email, setEmail] = useState("");
@@ -56,9 +57,7 @@ export default function Login() {
         />
 
         <div className="label">Password</div>
-        <input
-          className="input"
-          type="password"
+        <PasswordInput
           placeholder="........"
           value={password}
           maxLength={72}

@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext.jsx";
 import AuthFrame from "../components/AuthFrame.jsx";
+import PasswordInput from "../components/PasswordInput.jsx";
 
 export default function Register() {
   const { register } = useAuth();
@@ -99,9 +100,7 @@ export default function Register() {
         <div className="split-grid">
           <div>
             <div className="label">Password</div>
-            <input
-              className="input"
-              type="password"
+            <PasswordInput
               placeholder="........"
               value={password}
               minLength={8}

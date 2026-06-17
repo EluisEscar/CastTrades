@@ -373,6 +373,10 @@ function serializeCookie(name, value, options = {}) {
     segments.push("HttpOnly");
   }
 
+  if (options.domain) {
+    segments.push(`Domain=${options.domain}`);
+  }
+
   if (options.sameSite) {
     segments.push(`SameSite=${options.sameSite}`);
   }
@@ -387,11 +391,12 @@ function serializeCookie(name, value, options = {}) {
 export function setAuthCookie(
   res,
   token,
-  { cookieName, maxAgeSeconds, secure, sameSite = "Lax" }
+  { cookieName, domain, maxAgeSeconds, secure, sameSite = "Lax" }
 ) {
   res.setHeader(
     "Set-Cookie",
     serializeCookie(cookieName, token, {
+      domain,
       httpOnly: true,
       maxAge: maxAgeSeconds,
       path: "/",
@@ -401,10 +406,11 @@ export function setAuthCookie(
   );
 }
 
-export function clearAuthCookie(res, { cookieName, secure, sameSite = "Lax" }) {
+export function clearAuthCookie(res, { cookieName, domain, secure, sameSite = "Lax" }) {
   res.setHeader(
     "Set-Cookie",
     serializeCookie(cookieName, "", {
+      domain,
       httpOnly: true,
       maxAge: 0,
       path: "/",

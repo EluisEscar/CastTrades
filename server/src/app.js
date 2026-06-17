@@ -51,8 +51,9 @@ const EXPIRED_REQUEST_RETENTION_DAYS = 7;
 const CLOSED_REQUEST_RETENTION_DAYS = 30;
 const NOTIFICATION_RETENTION_DAYS = 30;
 const AUTH_COOKIE_NAME = process.env.AUTH_COOKIE_NAME || "casttrades_session";
+const AUTH_COOKIE_DOMAIN = process.env.AUTH_COOKIE_DOMAIN || undefined;
 const AUTH_COOKIE_MAX_AGE_SECONDS = 7 * 24 * 60 * 60;
-const AUTH_COOKIE_SECURE = parseBooleanEnv(process.env.AUTH_COOKIE_SECURE);
+const AUTH_COOKIE_SECURE = parseBooleanEnv(process.env.AUTH_COOKIE_SECURE, true);
 const AUTH_COOKIE_SAME_SITE = parseCookieSameSiteEnv(
   process.env.AUTH_COOKIE_SAME_SITE,
   "Lax"
@@ -729,6 +730,7 @@ app.post("/auth/register", authRateLimiter, requireJsonBody, async (req, res) =>
     const token = signToken(user);
     setAuthCookie(res, token, {
       cookieName: AUTH_COOKIE_NAME,
+      domain: AUTH_COOKIE_DOMAIN,
       maxAgeSeconds: AUTH_COOKIE_MAX_AGE_SECONDS,
       secure: AUTH_COOKIE_SECURE,
       sameSite: AUTH_COOKIE_SAME_SITE,
@@ -776,6 +778,7 @@ app.post("/auth/login", authRateLimiter, requireJsonBody, async (req, res) => {
     const token = signToken(sessionUser);
     setAuthCookie(res, token, {
       cookieName: AUTH_COOKIE_NAME,
+      domain: AUTH_COOKIE_DOMAIN,
       maxAgeSeconds: AUTH_COOKIE_MAX_AGE_SECONDS,
       secure: AUTH_COOKIE_SECURE,
       sameSite: AUTH_COOKIE_SAME_SITE,
@@ -800,6 +803,7 @@ app.post("/auth/login", authRateLimiter, requireJsonBody, async (req, res) => {
 app.post("/auth/logout", (_req, res) => {
   clearAuthCookie(res, {
     cookieName: AUTH_COOKIE_NAME,
+    domain: AUTH_COOKIE_DOMAIN,
     secure: AUTH_COOKIE_SECURE,
     sameSite: AUTH_COOKIE_SAME_SITE,
   });
